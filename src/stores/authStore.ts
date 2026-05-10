@@ -143,7 +143,7 @@ interface AuthState {
 
 export const DEFAULT_ADMIN = {
   email:
-    (import.meta.env.VITE_DEFAULT_ADMIN_EMAIL as string | undefined) ?? "adminhaikal@rekap.data",
+    (import.meta.env.VITE_DEFAULT_ADMIN_EMAIL as string | undefined) ?? "haikal405278@gmail.com",
   password:
     (import.meta.env.VITE_DEFAULT_ADMIN_PASSWORD as string | undefined) ??
     "haikalrekapnilai60707295",
