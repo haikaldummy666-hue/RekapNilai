@@ -284,9 +284,20 @@
   --transition-base: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Neutralise modern color-functions that html2canvas cannot parse */
+.pdf-mode,
+.pdf-mode * {
+  --shadow-elegant: 0 10px 30px -10px rgba(15, 118, 110, 0.25) !important;
+  --shadow-soft: 0 4px 16px -4px rgba(15, 23, 42, 0.12) !important;
+  --shadow-glow: 0 0 40px rgba(20, 184, 166, 0.25) !important;
+  --glass-bg: rgba(255, 255, 255, 0.96) !important;
+  --glass-border: rgba(15, 23, 42, 0.08) !important;
+}
+
 .pdf-mode body {
   background-image: none !important;
   background-attachment: scroll !important;
+  background-color: #f8fafc !important;
 }
 
 .pdf-mode .glass {

@@ -2,6 +2,48 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
+/**
+ * html2canvas uses its own CSS parser that does NOT support oklch() or
+ * color-mix(in oklab, ...). This helper walks every stylesheet and inline style
+ * in the cloned document and replaces those functions with rgba() fallbacks so
+ * html2canvas can parse the CSS without throwing.
+ */
+function sanitizeColorsForHtml2Canvas(doc: Document) {
+  // Regex patterns for unsupported modern color functions
+  const oklab = /color-mix\s*\(\s*in\s+oklab[^)]*\)/gi;
+  const oklch = /oklch\s*\([^)]*\)/gi;
+
+  // Replace with safe transparent/white fallbacks
+  const replaceFn = (css: string) =>
+    css.replace(oklab, "rgba(0,0,0,0)").replace(oklch, "#000000");
+
+  // 1. Walk stylesheets
+  for (const sheet of Array.from(doc.styleSheets)) {
+    try {
+      const rules = Array.from(sheet.cssRules || []);
+      for (const rule of rules) {
+        if (rule instanceof CSSStyleRule || rule instanceof CSSMediaRule) {
+          // We can't mutate cssText directly on sub-rules easily,
+          // so handle it via the owning <style> element below.
+        }
+      }
+    } catch {
+      // cross-origin sheets — skip
+    }
+  }
+
+  // 2. Replace text content of every <style> tag
+  for (const style of Array.from(doc.querySelectorAll("style"))) {
+    style.textContent = replaceFn(style.textContent ?? "");
+  }
+
+  // 3. Replace inline style attributes on every element
+  for (const el of Array.from(doc.querySelectorAll("[style]"))) {
+    const htmlEl = el as HTMLElement;
+    htmlEl.style.cssText = replaceFn(htmlEl.style.cssText);
+  }
+}
+
 export async function exportElementToPDF(element: HTMLElement, filename: string) {
   const rect = element.getBoundingClientRect();
   if (rect.width < 2 || rect.height < 2) {
@@ -22,6 +64,9 @@ export async function exportElementToPDF(element: HTMLElement, filename: string)
       imageTimeout: 15000,
       onclone: (doc) => {
         doc.documentElement.classList.add("pdf-mode");
+        // Must run AFTER adding pdf-mode so the class overrides are in place,
+        // then sanitise any remaining modern color functions.
+        sanitizeColorsForHtml2Canvas(doc);
       },
     });
   } catch (e) {
