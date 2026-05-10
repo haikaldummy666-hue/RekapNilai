@@ -60,7 +60,7 @@ export function StudentSwitcher({
     if (!showClassFilter) return;
     const k = activeStudent?.identitas.kelas?.trim() ?? "";
     if (k && k !== selectedKelas) setSelectedKelas(k);
-  }, [activeId, showClassFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeId, showClassFilter]);
 
   // Students visible in the student dropdown (filtered by selected class)
   const visibleStudents = useMemo(() => {

@@ -101,6 +101,17 @@ function DaftarSiswaPage() {
     return Array.from(classes).sort();
   }, [students]);
 
+  const classCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    students.forEach((s) => {
+      const k = s.identitas.kelas?.trim();
+      if (k) {
+        map.set(k, (map.get(k) ?? 0) + 1);
+      }
+    });
+    return map;
+  }, [students]);
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
 
