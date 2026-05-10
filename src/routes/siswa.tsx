@@ -25,12 +25,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SUBJECTS, type Subject } from "@/data/subjects";
-import { useStudentStore } from "@/stores/studentStore";
+import { collectKelasList, normalizeKelas, useStudentStore } from "@/stores/studentStore";
 import type { Student } from "@/types/student.types";
 import type { Predikat, NilaiHistoryEntry } from "@/types/nilai.types";
 import {
   buildHasilAkhir,
   buildHasilUjian,
+  nilaiFillSummary,
+  type NilaiFillStatus,
   predikatOf,
   rataKeseluruhan,
   rataKurmerPerMapel,
@@ -59,6 +61,12 @@ const PREDIKAT_COLOR: Record<Predikat, string> = {
   Baik: "bg-success/15 text-success border-success/30",
   Cukup: "bg-warning/15 text-warning border-warning/30",
   Kurang: "bg-destructive/15 text-destructive border-destructive/30",
+};
+
+const NILAI_STATUS_BADGE: Record<NilaiFillStatus, { label: string; className: string }> = {
+  completed: { label: "completed", className: "bg-success/15 text-success border-success/30" },
+  "in progress": { label: "in progress", className: "bg-warning/15 text-warning border-warning/30" },
+  "not started": { label: "not started", className: "bg-muted/30 text-muted-foreground border-border" },
 };
 
 function valueForMetric(nilai: Student["nilai"], subject: Subject, metric: Metric): number {
@@ -93,18 +101,13 @@ function DaftarSiswaPage() {
 
   // Extract unique class list
   const classList = useMemo(() => {
-    const classes = new Set(
-      students
-        .map((s) => s.identitas.kelas)
-        .filter((k): k is string => Boolean(k && k.trim()))
-    );
-    return Array.from(classes).sort();
+    return collectKelasList(students);
   }, [students]);
 
   const classCountMap = useMemo(() => {
     const map = new Map<string, number>();
     students.forEach((s) => {
-      const k = s.identitas.kelas?.trim();
+      const k = normalizeKelas(s.identitas.kelas);
       if (k) {
         map.set(k, (map.get(k) ?? 0) + 1);
       }
@@ -140,7 +143,8 @@ function DaftarSiswaPage() {
     const filtered = enriched.filter((r) => {
       if (q && !r.search.includes(q)) return false;
       if (gender !== "all" && r.student.identitas.jenisKelamin !== gender) return false;
-      if (kelas !== "all" && r.student.identitas.kelas !== kelas) return false;
+      if (kelas !== "all" && normalizeKelas(r.student.identitas.kelas) !== normalizeKelas(kelas))
+        return false;
       if (predikat !== "all" && r.predikat !== predikat) return false;
       if (peringkat === "ada" && r.student.nilai.peringkatKelas === undefined) return false;
       if (peringkat === "kosong" && r.student.nilai.peringkatKelas !== undefined) return false;
@@ -190,7 +194,7 @@ function DaftarSiswaPage() {
                   onClick={() => setKelas(k)}
                   className={`w-full justify-start text-left ${kelas === k ? "bg-gradient-primary text-primary-foreground" : ""}`}
                 >
-                  Kelas {k} ({classCountMap[k] || 0})
+                  Kelas {k} ({classCountMap.get(k) ?? 0})
                 </Button>
               ))}
             </div>
@@ -249,7 +253,21 @@ function DaftarSiswaPage() {
           </Select>
         </div>
 
-        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+          <Select value={kelas} onValueChange={(v) => setKelas(v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Kelas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Kelas</SelectItem>
+              {classList.map((k) => (
+                <SelectItem key={k} value={k}>
+                  Kelas {k}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Select value={peringkat} onValueChange={(v) => setPeringkat(v as typeof peringkat)}>
             <SelectTrigger>
               <SelectValue placeholder="Peringkat" />
@@ -304,6 +322,8 @@ function DaftarSiswaPage() {
             <TableBody>
               {rows.map((r) => {
                 const isActive = r.student.id === activeId;
+                const fill = nilaiFillSummary(r.student.nilai);
+                const status = NILAI_STATUS_BADGE[fill.status];
                 return (
                   <TableRow
                     key={r.student.id}
@@ -329,6 +349,9 @@ function DaftarSiswaPage() {
                           <div className="mt-2">
                             <Badge className={PREDIKAT_COLOR[r.predikat]} variant="outline">
                               {r.predikat}
+                            </Badge>
+                            <Badge className={status.className} variant="outline">
+                              {status.label} · {fill.percent}%
                             </Badge>
                           </div>
                         </div>
@@ -718,6 +741,9 @@ function StudentHistoryModal({
   onOpenChange: (open: boolean) => void;
   isMobile: boolean;
 }) {
+  const fill = nilaiFillSummary(student.nilai);
+  const status = NILAI_STATUS_BADGE[fill.status];
+
   const content = (
     <div className="space-y-4">
       <div>
@@ -727,6 +753,14 @@ function StudentHistoryModal({
         <p className="text-xs text-muted-foreground">
           NISN: {student.identitas.nisn} | Kelas: {student.identitas.kelas || "-"}
         </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Badge className={status.className} variant="outline">
+            {status.label} · {fill.percent}%
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            ({fill.filled}/{fill.total} terisi)
+          </span>
+        </div>
       </div>
 
       <div className="space-y-2">

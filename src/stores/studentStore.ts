@@ -590,6 +590,29 @@ export const useStudentStore = create<StudentState>()(
   ),
 );
 
+export function normalizeKelas(kelas: string | undefined | null): string {
+  return (kelas ?? "").trim();
+}
+
+export function collectKelasList(students: Student[]): string[] {
+  const set = new Set<string>();
+  students.forEach((s) => {
+    const k = normalizeKelas(s.identitas.kelas);
+    if (k) set.add(k);
+  });
+  return Array.from(set).sort();
+}
+
+export function filterStudentsByKelas(
+  students: Student[],
+  kelas: string | "all",
+): Student[] {
+  if (kelas === "all") return students;
+  const target = normalizeKelas(kelas);
+  if (!target) return students;
+  return students.filter((s) => normalizeKelas(s.identitas.kelas) === target);
+}
+
 export function setStudentStoreTenant(tenantKey: string) {
   const key = tenantKey.trim() ? tenantKey.trim() : "public";
   const name = `rekap-nilai-mi-v1:${key}`;

@@ -2,6 +2,8 @@ import { SUBJECTS, type Subject } from "@/data/subjects";
 import type { NilaiSiswa } from "@/types/student.types";
 import type { HasilAkhirRow, HasilUjianRow, Predikat } from "@/types/nilai.types";
 
+export type NilaiFillStatus = "not started" | "in progress" | "completed";
+
 export function rataKurmerPerMapel(nilai: NilaiSiswa, subject: Subject): number {
   const r = nilai.kurmer[subject];
   if (!r) return 0;
@@ -56,4 +58,44 @@ export function rataKeseluruhan(nilai: NilaiSiswa): number {
 
 export function jumlahHasilAkhir(nilai: NilaiSiswa): number {
   return buildHasilAkhir(nilai).reduce((a, r) => a + r.nilaiAkhir, 0);
+}
+
+function isFilled(n: number | undefined | null): boolean {
+  if (n === undefined || n === null) return false;
+  if (!Number.isFinite(n)) return false;
+  return n !== 0;
+}
+
+export function nilaiFillSummary(nilai: NilaiSiswa): {
+  status: NilaiFillStatus;
+  filled: number;
+  total: number;
+  percent: number;
+} {
+  let total = 0;
+  let filled = 0;
+
+  for (const s of SUBJECTS) {
+    const k = nilai.kurmer[s];
+    total += 3;
+    if (isFilled(k?.k5s1)) filled++;
+    if (isFilled(k?.k5s2)) filled++;
+    if (isFilled(k?.k6s1)) filled++;
+
+    total += 1;
+    if (isFilled(nilai.ujianTertulis[s])) filled++;
+
+    total += 1;
+    if (isFilled(nilai.praktek[s])) filled++;
+  }
+
+  total += 1;
+  if (isFilled(nilai.peringkatKelas)) filled++;
+
+  const status: NilaiFillStatus =
+    filled === 0 ? "not started" : filled === total ? "completed" : "in progress";
+
+  const percent = total === 0 ? 0 : Math.round((filled / total) * 100);
+
+  return { status, filled, total, percent };
 }
