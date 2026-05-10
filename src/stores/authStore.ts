@@ -262,9 +262,14 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     });
 
     if (error) {
-      if (error.message.toLowerCase().includes("already registered") ||
-          error.message.toLowerCase().includes("already exists") ||
-          error.message.toLowerCase().includes("email")) {
+      const msg = error.message.toLowerCase();
+      const code = (error as Record<string, unknown>).code as string ?? "";
+      const isEmailExists =
+        code === "user_already_exists" ||
+        msg.includes("user already registered") ||
+        msg.includes("already registered") ||
+        msg.includes("already exists");
+      if (isEmailExists) {
         return { ok: false, reason: "EMAIL_EXISTS" };
       }
       return { ok: false, reason: "ERROR", message: error.message };
@@ -365,7 +370,14 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     });
 
     if (error) {
-      if (error.message.toLowerCase().includes("already")) {
+      const msg = error.message.toLowerCase();
+      const code = (error as Record<string, unknown>).code as string ?? "";
+      const isEmailExists =
+        code === "user_already_exists" ||
+        msg.includes("user already registered") ||
+        msg.includes("already registered") ||
+        msg.includes("already exists");
+      if (isEmailExists) {
         return { ok: false, reason: "EMAIL_EXISTS" };
       }
       return { ok: false, reason: "ERROR", message: error.message };
@@ -375,6 +387,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     await sb
       .from("madrasah_profiles")
       .update({
+        email: input.email.toLowerCase().trim(),
         nama_madrasah: input.namaMadrasah.trim(),
         alamat: input.alamat?.trim() ?? "",
         kontak: input.kontak?.trim() ?? "",
