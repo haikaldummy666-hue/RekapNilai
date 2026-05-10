@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { clampNilai } from "@/utils/formatUtils";
@@ -12,14 +12,11 @@ interface Props {
 
 /**
  * Input nilai 0–100 dengan clamp otomatis dan commit on blur/Enter.
- * Menggunakan useLayoutEffect agar sinkron sebelum paint sehingga
- * tidak ada flash nilai lama saat ganti siswa.
  */
 export function NilaiInput({ value, onCommit, className, ariaLabel }: Props) {
   const [raw, setRaw] = useState<string>(value !== 0 ? String(value) : "");
 
-  // Sync sebelum paint sehingga tidak ada frame dengan nilai siswa lama
-  useLayoutEffect(() => {
+  useEffect(() => {
     setRaw(value !== 0 ? String(value) : "");
   }, [value]);
 

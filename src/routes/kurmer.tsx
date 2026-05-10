@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
@@ -54,24 +54,28 @@ function KurmerPage() {
 
   const baselineRef = useRef<KurmerDraft | null>(null);
   const draftRef = useRef<KurmerDraft | null>(null);
+  const draftOwnerRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<KurmerDraft | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Gunakan useLayoutEffect + active?.id agar draft reset sinkron sebelum
-  // paint dan tidak reset ulang hanya karena nilai siswa sama diupdate.
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!active) {
       baselineRef.current = null;
       draftRef.current = null;
+      draftOwnerRef.current = null;
       setDraft(null);
       return;
     }
     const next = cloneKurmer(active.nilai.kurmer);
     baselineRef.current = next;
     draftRef.current = next;
+    draftOwnerRef.current = active.id;
     setDraft(next);
   }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Jika draft milik siswa lain (belum di-reset oleh effect), gunakan null
+  // sehingga render fallback ke active.nilai langsung — tidak ada flash nilai lama
+  const currentDraft = draftOwnerRef.current === active?.id ? draft : null;
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;
@@ -177,10 +181,10 @@ function KurmerPage() {
               </TableHeader>
               <TableBody>
                 {SUBJECTS.map((s, i) => {
-                  const r = draft?.[s] ?? active.nilai.kurmer[s];
+                  const r = currentDraft?.[s] ?? active.nilai.kurmer[s];
                   const sum = r.k5s1 + r.k5s2 + r.k6s1;
                   const rata = rataKurmerPerMapel(
-                    { ...active.nilai, kurmer: draft ?? active.nilai.kurmer },
+                    { ...active.nilai, kurmer: currentDraft ?? active.nilai.kurmer },
                     s,
                   );
                   return (

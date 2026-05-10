@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
@@ -42,7 +42,7 @@ function SKLPage() {
   const [peringkat, setPeringkat] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!active) {
       baselineRef.current = undefined;
       setPeringkat("");

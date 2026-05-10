@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
@@ -51,13 +51,15 @@ function HasilUjianPage() {
 
   const baselineRef = useRef<UjianDraft | null>(null);
   const draftRef = useRef<UjianDraft | null>(null);
+  const draftOwnerRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<UjianDraft | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!active) {
       baselineRef.current = null;
       draftRef.current = null;
+      draftOwnerRef.current = null;
       setDraft(null);
       return;
     }
@@ -67,9 +69,11 @@ function HasilUjianPage() {
     };
     baselineRef.current = next;
     draftRef.current = next;
+    draftOwnerRef.current = active.id;
     setDraft(next);
   }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const currentDraft = draftOwnerRef.current === active?.id ? draft : null;
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;
@@ -185,13 +189,13 @@ function HasilUjianPage() {
                     <TableCell className="font-medium">{s}</TableCell>
                     <TableCell className="text-center">
                       <NilaiInput
-                        value={(draft?.tertulis[s] ?? active.nilai.ujianTertulis[s] ?? 0) as number}
+                        value={(currentDraft?.tertulis[s] ?? active.nilai.ujianTertulis[s] ?? 0) as number}
                         onCommit={(v) => setCell("tertulis", s, v)}
                       />
                     </TableCell>
                     <TableCell className="text-center">
                       <NilaiInput
-                        value={(draft?.praktek[s] ?? active.nilai.praktek[s] ?? 0) as number}
+                        value={(currentDraft?.praktek[s] ?? active.nilai.praktek[s] ?? 0) as number}
                         onCommit={(v) => setCell("praktek", s, v)}
                       />
                     </TableCell>
@@ -200,8 +204,8 @@ function HasilUjianPage() {
                         rataUjianPerMapel(
                           {
                             ...active.nilai,
-                            ujianTertulis: draft?.tertulis ?? active.nilai.ujianTertulis,
-                            praktek: draft?.praktek ?? active.nilai.praktek,
+                            ujianTertulis: currentDraft?.tertulis ?? active.nilai.ujianTertulis,
+                            praktek: currentDraft?.praktek ?? active.nilai.praktek,
                           },
                           s,
                         ),

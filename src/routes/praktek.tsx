@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
@@ -45,22 +45,26 @@ function PraktekPage() {
 
   const baselineRef = useRef<PraktekDraft | null>(null);
   const draftRef = useRef<PraktekDraft | null>(null);
+  const draftOwnerRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<PraktekDraft | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!active) {
       baselineRef.current = null;
       draftRef.current = null;
+      draftOwnerRef.current = null;
       setDraft(null);
       return;
     }
     const next = clonePraktek(active.nilai.praktek);
     baselineRef.current = next;
     draftRef.current = next;
+    draftOwnerRef.current = active.id;
     setDraft(next);
   }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const currentDraft = draftOwnerRef.current === active?.id ? draft : null;
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;
@@ -173,7 +177,7 @@ function PraktekPage() {
                     <TableCell className="font-medium">{s}</TableCell>
                     <TableCell className="text-center">
                       <NilaiInput
-                        value={(draft?.[s] ?? active.nilai.praktek[s] ?? 0) as number}
+                        value={(currentDraft?.[s] ?? active.nilai.praktek[s] ?? 0) as number}
                         onCommit={(v) => setCell(s, v)}
                         ariaLabel={`Praktek ${s}`}
                       />

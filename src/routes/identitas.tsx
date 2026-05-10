@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, LoaderCircle, Save, Users } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -67,18 +67,21 @@ function IdentitasPage() {
 
   const baselineRef = useRef<Identitas | null>(null);
   const draftRef = useRef<Identitas | null>(null);
+  const draftOwnerRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<Identitas | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!active) {
       baselineRef.current = null;
       draftRef.current = null;
+      draftOwnerRef.current = null;
       setDraft(null);
       return;
     }
     baselineRef.current = active.identitas;
     draftRef.current = active.identitas;
+    draftOwnerRef.current = active.id;
     setDraft(active.identitas);
   }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
