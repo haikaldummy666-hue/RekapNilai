@@ -61,6 +61,27 @@ function dbProfileToAuthUser(p: DbProfile, emailFallback?: string): AuthUser {
   };
 }
 
+export const DEFAULT_LOGO_DATA_URL =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="url(#g)"/>
+  <path d="M64 108c0-22.091 17.909-40 40-40h48c22.091 0 40 17.909 40 40v40c0 22.091-17.909 40-40 40h-48c-22.091 0-40-17.909-40-40v-40z" fill="rgba(0,0,0,0.15)"/>
+  <text x="128" y="148" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system" font-size="64" font-weight="800" fill="#ffffff">MI</text>
+</svg>`,
+  );
+
+export function resolveMadrasahLogo(profile?: MadrasahProfile | null): string {
+  const v = profile?.logoDataUrl;
+  return v && v.trim().length > 0 ? v : DEFAULT_LOGO_DATA_URL;
+}
+
 type LoginResult =
   | { ok: true; user: AuthUser }
   | { ok: false; reason: "INVALID_CREDENTIALS" | "PENDING" | "DISABLED" | "NO_SUPABASE" };
