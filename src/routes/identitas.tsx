@@ -26,6 +26,13 @@ export const Route = createFileRoute("/identitas")({
   component: IdentitasPage,
 });
 
+const KELAS_OPTIONS = [
+  "6.A", "6.B", "6.C", "6.D",
+  "6.1", "6.2", "6.3", "6.4",
+  "6-A", "6-B", "6-C", "6-D",
+  "6-1", "6-2", "6-3", "6-4",
+];
+
 const IdentitasSchema = z.object({
   nisn: z
     .string()
@@ -44,7 +51,9 @@ const IdentitasSchema = z.object({
     ),
   namaAyah: z.string().trim(),
   namaIbu: z.string().trim(),
+  kelas: z.string().trim().optional().or(z.literal("")),
 });
+
 
 function IdentitasPage() {
   const active = useActiveStudent();
@@ -263,7 +272,7 @@ function IdentitasPage() {
             title="Data Diri"
             actions={
               <div className="flex items-end gap-2">
-                <StudentSwitcher label="data siswa" />
+                <StudentSwitcher label="data siswa" showClassFilter />
                 <Button
                   onClick={save}
                   disabled={!isDirty || saving}
@@ -344,6 +353,27 @@ function IdentitasPage() {
                   onChange={(e) => setField({ namaIbu: e.target.value })}
                 />
               </Field>
+              <Field label="Kelas" className="sm:col-span-2">
+                <Select
+                  value={draft?.kelas ?? ""}
+                  onValueChange={(v) => setField({ kelas: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih kelas…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— Belum ditentukan —</SelectItem>
+                    {KELAS_OPTIONS.map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {k}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Digunakan untuk filter siswa di halaman pengisian nilai.
+                </p>
+              </Field>
             </div>
           </PageCard>
 
@@ -358,7 +388,7 @@ function IdentitasPage() {
                   <p className="text-sm font-semibold">Kartu Identitas Siswa</p>
                 </div>
                 <div className="rounded-full bg-gradient-gold px-3 py-1 text-xs font-bold text-gold-foreground shadow-soft">
-                  Kelas 6
+                  {active.identitas.kelas ? `Kelas ${active.identitas.kelas}` : "Kelas 6"}
                 </div>
               </div>
               <div className="mt-6 space-y-3">
@@ -375,6 +405,9 @@ function IdentitasPage() {
                 />
                 <Row k="Ayah" v={active.identitas.namaAyah || "—"} />
                 <Row k="Ibu" v={active.identitas.namaIbu || "—"} />
+                {active.identitas.kelas && (
+                  <Row k="Kelas" v={active.identitas.kelas} />
+                )}
               </div>
             </div>
           </PageCard>

@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { Download, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
+import { StudentSwitcher } from "@/components/layout/StudentSwitcher";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -80,6 +81,7 @@ function HasilAkhirPage() {
         description="Nilai Akhir = (Rata-rata Kurmer × 60%) + (Nilai Ujian × 40%)"
         actions={
           <>
+            <StudentSwitcher label="siswa" showClassFilter compact />
             <Button variant="outline" onClick={onExportPDF}>
               <FileText className="mr-2 h-4 w-4" /> Download PDF
             </Button>

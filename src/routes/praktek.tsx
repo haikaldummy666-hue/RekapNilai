@@ -137,7 +137,7 @@ function PraktekPage() {
         <PageCard
           actions={
             <div className="flex items-end gap-2">
-              <StudentSwitcher label="data siswa" />
+              <StudentSwitcher label="data siswa" showClassFilter />
               <Button
                 onClick={requestSave}
                 disabled={!isDirty || saving}

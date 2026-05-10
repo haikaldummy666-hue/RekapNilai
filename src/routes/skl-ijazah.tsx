@@ -128,7 +128,7 @@ function SKLPage() {
   const logoSrc = resolveMadrasahLogo(user?.profile);
   const namaMadrasah = user?.profile.namaMadrasah || "Madrasah Ibtidaiyah";
   const kepala = user?.profile.namaKepalaMadrasah?.trim() || "—";
-  const kelas = user?.profile.kelas?.trim() || "—";
+  const kelas = active.identitas.kelas?.trim() || user?.profile.kelas?.trim() || "—";
 
   const onPDF = async () => {
     if (!printRef.current) return;
@@ -159,7 +159,7 @@ function SKLPage() {
         title="Peringkat Kelas"
         actions={
           <div className="flex items-end gap-2">
-            <StudentSwitcher label="data siswa" />
+            <StudentSwitcher label="data siswa" showClassFilter />
             <Button
               onClick={requestSave}
               disabled={!isDirty || saving}

@@ -101,6 +101,7 @@ const defaultIdentitas: Identitas = {
   tanggalLahir: "",
   namaAyah: "",
   namaIbu: "",
+  kelas: "",
 };
 
 function newStudent(identitas?: Partial<Identitas>): Student {
@@ -129,6 +130,7 @@ function sanitizeIdentitas(raw: unknown): Identitas | null {
     tanggalLahir: typeof r.tanggalLahir === "string" ? r.tanggalLahir : "",
     namaAyah: typeof r.namaAyah === "string" ? r.namaAyah : "",
     namaIbu: typeof r.namaIbu === "string" ? r.namaIbu : "",
+    kelas: typeof r.kelas === "string" ? r.kelas : "",
   };
 }
 

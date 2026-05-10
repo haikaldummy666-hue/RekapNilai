@@ -10,6 +10,8 @@ export interface Identitas {
   tanggalLahir: string;
   namaAyah: string;
   namaIbu: string;
+  /** Format kelas siswa, mis: 6.A, 6.B, 6.1 */
+  kelas?: string;
 }
 
 export interface NilaiKurmerRow {

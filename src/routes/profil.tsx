@@ -111,7 +111,7 @@ function ProfilPage() {
 
     setSaving(true);
     try {
-      const res = updateMyProfile(parsed.data);
+      const res = await updateMyProfile(parsed.data);
       if (!res.ok) {
         toast.error("Tidak bisa menyimpan profil");
         return;
@@ -206,37 +206,7 @@ function ProfilPage() {
             </p>
           </div>
 
-          <div className="space-y-1.5 sm:col-span-2">
-            <p className="text-sm font-medium">Format Kelas</p>
-            <Select value={kelas} onValueChange={setKelas}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih format kelas…" />
-              </SelectTrigger>
-              <SelectContent>
-                {[
-                  "6.A",
-                  "6.B",
-                  "6.C",
-                  "6.1",
-                  "6.2",
-                  "6.3",
-                  "6-A",
-                  "6-B",
-                  "6-C",
-                  "6-1",
-                  "6-2",
-                  "6-3",
-                ].map((v) => (
-                  <SelectItem key={v} value={v}>
-                    {v}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">Dipakai konsisten di semua dokumen.</p>
-          </div>
-
-          <div className="space-y-1.5 sm:col-span-2">
+<div className="space-y-1.5 sm:col-span-2">
             <p className="text-sm font-medium">Logo (opsional)</p>
             <Input
               type="file"

@@ -1,263 +1,208 @@
 /**
  * Database Operations with Backup & Rollback Support
- * Handles transactional operations on student data
+ * Handles transactional operations on student data.
+ *
+ * NOTE: Students are stored in localStorage (Zustand persist), NOT in Supabase.
+ * Supabase is only used for auth (madrasah_profiles). The scanning tables
+ * (scanning_transactions, backup_snapshots, scanning_logs) may or may not exist;
+ * all DB calls here are best-effort — they never throw, so the scanning flow
+ * still works even when those tables are absent.
  */
 
-import { requireSupabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
 import type { ScanningTransaction, BackupSnapshot } from "@/types/scanning.types";
-import type { Student, Identitas, NilaiSiswa } from "@/types/student.types";
+import type { Student, NilaiSiswa } from "@/types/student.types";
 
 const SCANNING_TRANSACTIONS_TABLE = "scanning_transactions";
 const BACKUP_SNAPSHOTS_TABLE = "backup_snapshots";
 const SCANNING_LOGS_TABLE = "scanning_logs";
 
-/**
- * Create scanning transaction record
- */
-export async function createScanningTransaction(
-  transaction: Omit<ScanningTransaction, "id">,
-): Promise<ScanningTransaction> {
-  const sb = requireSupabase();
-  const id = `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-  const record = {
-    id,
-    ...transaction,
-    timestamp: new Date().toISOString(),
-  };
-
-  const { error } = await sb.from(SCANNING_TRANSACTIONS_TABLE).insert([record]);
-
-  if (error) {
-    console.error("Error creating scanning transaction:", error);
-    throw new Error(`Failed to create transaction: ${error.message}`);
-  }
-
-  return record as ScanningTransaction;
+/** Generate a unique local ID */
+function localId(prefix: string) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /**
- * Create backup snapshot of student data before applying changes
+ * Create scanning transaction record.
+ * Always returns a valid transaction object — Supabase insert is best-effort.
+ */
+export async function createScanningTransaction(
+  transaction: Omit<ScanningTransaction, "id" | "timestamp">,
+): Promise<ScanningTransaction> {
+  const id = localId("scan");
+  const record: ScanningTransaction = {
+    id,
+    ...transaction,
+    timestamp: new Date().toISOString(),
+  } as ScanningTransaction;
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from(SCANNING_TRANSACTIONS_TABLE).insert([record]);
+    } catch {
+      // Table may not exist — that's OK, scanning still works locally
+    }
+  }
+
+  return record;
+}
+
+/**
+ * Create backup snapshot of student data before applying changes.
+ * Best-effort — does not throw.
  */
 export async function createBackupSnapshot(
   studentId: string,
   studentData: Student,
   transactionId: string,
 ): Promise<BackupSnapshot> {
-  const sb = requireSupabase();
-
   const snapshot: BackupSnapshot = {
-    id: `backup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: localId("backup"),
     timestamp: new Date().toISOString(),
     studentId,
-    data: JSON.parse(JSON.stringify(studentData)), // Deep copy
+    data: JSON.parse(JSON.stringify(studentData)) as Student, // Deep copy
     transactionId,
   };
 
-  const { error } = await sb.from(BACKUP_SNAPSHOTS_TABLE).insert([snapshot]);
-
-  if (error) {
-    console.error("Error creating backup snapshot:", error);
-    throw new Error(`Failed to create backup: ${error.message}`);
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from(BACKUP_SNAPSHOTS_TABLE).insert([snapshot]);
+    } catch {
+      // Table may not exist — continue
+    }
   }
 
   return snapshot;
 }
 
 /**
- * Apply OCR extracted data to student record with backup
+ * Prepare and return OCR changes to apply to a student.
+ *
+ * Students live in localStorage (Zustand). This function does NOT update any
+ * Supabase table — it just computes & returns `appliedChanges` so the caller
+ * (scanning.tsx) can update the store.
  */
 export async function applyOcrDataToStudent(
   studentId: string,
-  extractedData: Record<string, any>,
+  extractedData: Record<string, unknown>,
   transactionId: string,
   currentStudent: Student,
-): Promise<{ success: boolean; transactionId: string; appliedChanges: any }> {
-  const sb = requireSupabase();
+): Promise<{ success: boolean; transactionId: string; appliedChanges: { identitas?: Partial<Student["identitas"]>; nilai?: Pick<NilaiSiswa, "ujianTertulis"> } }> {
+  // Best-effort backup (does not throw)
+  await createBackupSnapshot(studentId, currentStudent, transactionId);
 
-  try {
-    // Create backup before applying changes
-    const backup = await createBackupSnapshot(currentStudent, currentStudent, transactionId);
+  const appliedChanges: {
+    identitas?: Partial<Student["identitas"]>;
+    nilai?: Pick<NilaiSiswa, "ujianTertulis">;
+  } = {};
 
-    // Prepare updates
-    const updates: Partial<Student> = {};
+  // Build identitas patch
+  const identitasPatch: Partial<Student["identitas"]> = {};
+  if (extractedData.nisn) identitasPatch.nisn = String(extractedData.nisn);
+  if (extractedData.nama) identitasPatch.nama = String(extractedData.nama);
+  if (extractedData.jenisKelamin === "L" || extractedData.jenisKelamin === "P")
+    identitasPatch.jenisKelamin = extractedData.jenisKelamin;
+  if (extractedData.tempatLahir) identitasPatch.tempatLahir = String(extractedData.tempatLahir);
+  if (extractedData.tanggalLahir) identitasPatch.tanggalLahir = String(extractedData.tanggalLahir);
+  if (extractedData.namaAyah) identitasPatch.namaAyah = String(extractedData.namaAyah);
+  if (extractedData.namaIbu) identitasPatch.namaIbu = String(extractedData.namaIbu);
+  if (Object.keys(identitasPatch).length > 0) appliedChanges.identitas = identitasPatch;
 
-    // Update identitas if present
-    if (
-      extractedData.nisn ||
-      extractedData.nama ||
-      extractedData.jenisKelamin ||
-      extractedData.tempatLahir ||
-      extractedData.tanggalLahir
-    ) {
-      updates.identitas = {
-        ...currentStudent.identitas,
-        ...(extractedData.nisn && { nisn: extractedData.nisn }),
-        ...(extractedData.nama && { nama: extractedData.nama }),
-        ...(extractedData.jenisKelamin && { jenisKelamin: extractedData.jenisKelamin }),
-        ...(extractedData.tempatLahir && { tempatLahir: extractedData.tempatLahir }),
-        ...(extractedData.tanggalLahir && { tanggalLahir: extractedData.tanggalLahir }),
-        ...(extractedData.namaAyah && { namaAyah: extractedData.namaAyah }),
-        ...(extractedData.namaIbu && { namaIbu: extractedData.namaIbu }),
-      };
-    }
-
-    // Update nilai from extracted values
-    if (extractedData.values && Object.keys(extractedData.values).length > 0) {
-      updates.nilai = updateNilaiFromExtractedData(
-        currentStudent.nilai,
-        extractedData.values,
-        extractedData.semester,
-      );
-    }
-
-    updates.updatedAt = new Date().toISOString();
-
-    // Apply to database
-    const { error } = await sb.from("students").update(updates).eq("id", studentId);
-
-    if (error) {
-      // Rollback on error
-      await rollbackTransaction(transactionId, backup.id);
-      throw new Error(`Failed to apply OCR data: ${error.message}`);
-    }
-
-    // Log the transaction
-    await logScanningTransaction({
-      transactionId,
-      studentId,
-      status: "completed",
-      appliedChanges: {
-        before: currentStudent,
-        after: { ...currentStudent, ...updates },
-      },
-      backupId: backup.id,
-    });
-
-    return {
-      success: true,
-      transactionId,
-      appliedChanges: updates,
+  // Build nilai patch from extracted values
+  const values = extractedData.values as Record<string, number> | undefined;
+  if (values && Object.keys(values).length > 0) {
+    appliedChanges.nilai = {
+      ujianTertulis: {
+        ...currentStudent.nilai.ujianTertulis,
+        ...values,
+      } as NilaiSiswa["ujianTertulis"],
     };
-  } catch (error) {
-    console.error("Error applying OCR data:", error);
-    throw error;
   }
-}
 
-/**
- * Update nilai structure with extracted data
- */
-function updateNilaiFromExtractedData(
-  currentNilai: NilaiSiswa,
-  extractedValues: Record<string, number>,
-  semester: number,
-): NilaiSiswa {
-  const updated = JSON.parse(JSON.stringify(currentNilai)) as NilaiSiswa;
-
-  // Map extracted values to appropriate fields based on semester
-  Object.entries(extractedValues).forEach(([subject, value]) => {
-    // This depends on your specific mapping logic
-    // Adjust based on your Nilai structure
-    if (!updated.ujianTertulis) {
-      updated.ujianTertulis = {};
-    }
-
-    if (typeof updated.ujianTertulis === "object") {
-      (updated.ujianTertulis as any)[subject] = value;
-    }
+  // Best-effort log
+  await logScanningTransaction({
+    transactionId,
+    studentId,
+    status: "completed",
+    appliedChanges,
   });
 
-  return updated;
+  return { success: true, transactionId, appliedChanges };
 }
 
 /**
- * Rollback transaction to previous state
+ * Rollback transaction (best-effort — does not throw).
  */
 export async function rollbackTransaction(transactionId: string, backupId: string): Promise<void> {
-  const sb = requireSupabase();
+  const sb = getSupabase();
+  if (!sb) return;
 
   try {
-    // Get backup data
-    const { data: backup, error: fetchError } = await sb
+    const { data: backup } = await sb
       .from(BACKUP_SNAPSHOTS_TABLE)
       .select("*")
       .eq("id", backupId)
       .single();
 
-    if (fetchError || !backup) {
-      throw new Error(`Backup not found: ${fetchError?.message}`);
+    if (backup) {
+      await sb
+        .from(SCANNING_TRANSACTIONS_TABLE)
+        .update({ status: "rolled-back" })
+        .eq("id", transactionId);
     }
-
-    // Restore student data
-    const { error: updateError } = await sb
-      .from("students")
-      .update(backup.data)
-      .eq("id", backup.studentId);
-
-    if (updateError) {
-      throw new Error(`Failed to restore from backup: ${updateError.message}`);
-    }
-
-    // Update transaction status
-    await sb.from(SCANNING_TRANSACTIONS_TABLE).update({ status: "rolled-back" }).eq("id", transactionId);
-
-    // Log the rollback
-    await logScanningTransaction({
-      transactionId,
-      studentId: backup.studentId,
-      status: "rolled-back",
-      backupId,
-    });
-  } catch (error) {
-    console.error("Error rolling back transaction:", error);
-    throw error;
+  } catch {
+    // Ignore — tables may not exist
   }
 }
 
 /**
- * Log scanning transaction
+ * Log scanning transaction (best-effort — does not throw).
  */
-export async function logScanningTransaction(data: any): Promise<void> {
-  const sb = requireSupabase();
+export async function logScanningTransaction(data: Record<string, unknown>): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
 
   const logEntry = {
-    id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: localId("log"),
     timestamp: new Date().toISOString(),
     ...data,
   };
 
-  const { error } = await sb.from(SCANNING_LOGS_TABLE).insert([logEntry]);
-
-  if (error) {
-    console.error("Error logging transaction:", error);
-    // Don't throw - logging failure shouldn't break the main transaction
+  try {
+    await sb.from(SCANNING_LOGS_TABLE).insert([logEntry]);
+  } catch {
+    // Table may not exist — ignore
   }
 }
 
 /**
- * Get scanning history for a student
+ * Get scanning history for a student (returns [] on error).
  */
-export async function getScanningHistory(studentId: string, limit: number = 20): Promise<ScanningTransaction[]> {
-  const sb = requireSupabase();
+export async function getScanningHistory(
+  studentId: string,
+  limit = 20,
+): Promise<ScanningTransaction[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
 
-  const { data, error } = await sb
-    .from(SCANNING_TRANSACTIONS_TABLE)
-    .select("*")
-    .eq("studentId", studentId)
-    .order("timestamp", { ascending: false })
-    .limit(limit);
+  try {
+    const { data } = await sb
+      .from(SCANNING_TRANSACTIONS_TABLE)
+      .select("*")
+      .eq("studentId", studentId)
+      .order("timestamp", { ascending: false })
+      .limit(limit);
 
-  if (error) {
-    console.error("Error fetching scanning history:", error);
+    return (data || []) as ScanningTransaction[];
+  } catch {
     return [];
   }
-
-  return (data || []) as ScanningTransaction[];
 }
 
 /**
- * Get all scanning transactions with filters
+ * Get all scanning transactions with filters (returns [] on error).
  */
 export async function getAllScanningTransactions(filters?: {
   status?: string;
@@ -265,30 +210,22 @@ export async function getAllScanningTransactions(filters?: {
   dateTo?: string;
   limit?: number;
 }): Promise<ScanningTransaction[]> {
-  const sb = requireSupabase();
+  const sb = getSupabase();
+  if (!sb) return [];
 
-  let query = sb.from(SCANNING_TRANSACTIONS_TABLE).select("*");
+  try {
+    let query = sb.from(SCANNING_TRANSACTIONS_TABLE).select("*");
 
-  if (filters?.status) {
-    query = query.eq("status", filters.status);
-  }
+    if (filters?.status) query = query.eq("status", filters.status);
+    if (filters?.dateFrom) query = query.gte("timestamp", filters.dateFrom);
+    if (filters?.dateTo) query = query.lte("timestamp", filters.dateTo);
 
-  if (filters?.dateFrom) {
-    query = query.gte("timestamp", filters.dateFrom);
-  }
+    const { data } = await query
+      .order("timestamp", { ascending: false })
+      .limit(filters?.limit ?? 100);
 
-  if (filters?.dateTo) {
-    query = query.lte("timestamp", filters.dateTo);
-  }
-
-  const { data, error } = await query
-    .order("timestamp", { ascending: false })
-    .limit(filters?.limit || 100);
-
-  if (error) {
-    console.error("Error fetching transactions:", error);
+    return (data || []) as ScanningTransaction[];
+  } catch {
     return [];
   }
-
-  return (data || []) as ScanningTransaction[];
 }
