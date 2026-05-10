@@ -35,7 +35,7 @@ export function AppHeader() {
         </div>
         <div className="ml-auto flex items-center gap-2">
           {showStudentContext ? (
-            <StudentSwitcher compact showClassFilter showRemove={false} className="hidden sm:flex" />
+            <StudentSwitcher compact showRemove={false} className="hidden sm:flex" />
           ) : null}
           <ThemeToggle />
           {user ? (

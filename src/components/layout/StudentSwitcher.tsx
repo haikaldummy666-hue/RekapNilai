@@ -57,10 +57,12 @@ export function StudentSwitcher({
 
   // Sync filter when the active student changes externally
   useEffect(() => {
-    if (!showClassFilter) return;
-    const k = activeStudent?.identitas.kelas?.trim() ?? "";
-    if (k && k !== selectedKelas) setSelectedKelas(k);
-  }, [activeId, showClassFilter]);
+    if (!showClassFilter || !activeStudent) return;
+    const k = activeStudent.identitas.kelas?.trim();
+    if (k && k !== selectedKelas) {
+      setSelectedKelas(k);
+    }
+  }, [activeStudent?.id, showClassFilter]);
 
   // Students visible in the student dropdown (filtered by selected class)
   const visibleStudents = useMemo(() => {
