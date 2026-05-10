@@ -1,11 +1,5 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist/client",
-  "env": {
-    "VITE_SUPABASE_URL": "@vite_supabase_url",
-    "VITE_SUPABASE_ANON_KEY": "@vite_supabase_anon_key",
-    "VITE_DEFAULT_ADMIN_EMAIL": "@vite_default_admin_email",
-    "VITE_DEFAULT_ADMIN_PASSWORD": "@vite_default_admin_password"
-  },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
