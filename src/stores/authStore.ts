@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { getSupabase } from "@/lib/supabaseClient";
+import type { User, Session } from "@supabase/supabase-js";
 
 export type UserRole = "admin" | "madrasah";
 export type UserStatus = "active" | "pending" | "disabled";
@@ -19,178 +20,79 @@ export type AuthUser = {
   role: UserRole;
   status: UserStatus;
   email: string;
-  passwordHash: string;
   profile: MadrasahProfile;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
 };
 
-export type AuthSession = {
-  userId: string;
-  token: string;
-  createdAt: string;
-  expiresAt: string;
-};
-
-export type AuditAction =
-  | "AUTH_LOGIN"
-  | "AUTH_LOGOUT"
-  | "AUTH_REGISTER_MADRASAH"
-  | "ADMIN_CREATE_MADRASAH"
-  | "ADMIN_APPROVE_MADRASAH"
-  | "ADMIN_DISABLE_USER"
-  | "PROFILE_UPDATE";
-
-export type AuditLog = {
+// Shape from madrasah_profiles table
+type DbProfile = {
   id: string;
-  at: string;
-  actorId?: string;
-  action: AuditAction;
-  targetId?: string;
-  meta?: Record<string, unknown>;
+  role: UserRole;
+  status: UserStatus;
+  email: string;
+  nama_madrasah: string;
+  alamat: string;
+  kontak: string;
+  logo_url: string | null;
+  kepala_madrasah: string | null;
+  kelas_format: string | null;
+  created_at: string;
+  updated_at: string;
 };
+
+function dbProfileToAuthUser(p: DbProfile, emailFallback?: string): AuthUser {
+  return {
+    id: p.id,
+    role: p.role,
+    status: p.status,
+    email: p.email || emailFallback || "",
+    profile: {
+      namaMadrasah: p.nama_madrasah,
+      alamat: p.alamat,
+      kontak: p.kontak,
+      logoDataUrl: p.logo_url ?? undefined,
+      namaKepalaMadrasah: p.kepala_madrasah ?? undefined,
+      kelas: p.kelas_format ?? undefined,
+    },
+    createdAt: p.created_at,
+    updatedAt: p.updated_at,
+  };
+}
 
 type LoginResult =
   | { ok: true; user: AuthUser }
-  | { ok: false; reason: "INVALID_CREDENTIALS" | "PENDING" | "DISABLED" };
+  | { ok: false; reason: "INVALID_CREDENTIALS" | "PENDING" | "DISABLED" | "NO_SUPABASE" };
 
-type RegisterResult = { ok: true; user: AuthUser } | { ok: false; reason: "EMAIL_EXISTS" };
-
-type UpsertResult =
-  | { ok: true; user: AuthUser }
-  | { ok: false; reason: "EMAIL_EXISTS" | "FORBIDDEN" | "NOT_FOUND" };
+type RegisterResult =
+  | { ok: true }
+  | { ok: false; reason: "EMAIL_EXISTS" | "NO_SUPABASE" | "ERROR"; message?: string };
 
 type ApproveResult =
-  | { ok: true; user: AuthUser }
-  | { ok: false; reason: "FORBIDDEN" | "NOT_FOUND" };
+  | { ok: true }
+  | { ok: false; reason: "FORBIDDEN" | "NOT_FOUND" | "ERROR" };
 
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function toHex(bytes: Uint8Array) {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function sha256Hex(input: string) {
-  const anyCrypto = crypto as unknown as {
-    subtle?: SubtleCrypto;
-    hash?: (alg: string, data: string) => string;
-  };
-  if (anyCrypto.subtle) {
-    const data = new TextEncoder().encode(input);
-    const digest = await anyCrypto.subtle.digest("SHA-256", data);
-    return toHex(new Uint8Array(digest));
-  }
-  if (typeof anyCrypto.hash === "function") {
-    return anyCrypto.hash("sha256", input);
-  }
-  throw new Error("Crypto tidak tersedia untuk hashing password");
-}
-
-async function hashPassword(email: string, password: string) {
-  const e = normalizeEmail(email);
-  const p = password;
-  return sha256Hex(`rekap-nilai-mi:v1:${e}:${p}`);
-}
-
-export async function hashPasswordLocal(email: string, password: string) {
-  return hashPassword(email, password);
-}
-
-function defaultAdminUser(): AuthUser {
-  const createdAt = nowIso();
-  return {
-    id: "admin",
-    role: "admin",
-    status: "active",
-    email: DEFAULT_ADMIN.email,
-    passwordHash: "",
-    profile: { namaMadrasah: "Admin", alamat: "", kontak: "" },
-    createdAt,
-    updatedAt: createdAt,
-  };
-}
-
-function ensureAdminSeed(users: AuthUser[]): AuthUser[] {
-  if (users.some((u) => u.role === "admin")) return users;
-  return [...users, defaultAdminUser()];
-}
-
-function touchUser(u: AuthUser, patch: Partial<AuthUser>): AuthUser {
-  return { ...u, ...patch, updatedAt: nowIso() };
-}
-
-function safeStorage(): Storage {
-  const memoryStorage = (() => {
-    const map = new Map<string, string>();
-    const storage: Storage = {
-      get length() {
-        return map.size;
-      },
-      clear() {
-        map.clear();
-      },
-      getItem(key) {
-        return map.has(key) ? map.get(key)! : null;
-      },
-      key(index) {
-        return Array.from(map.keys())[index] ?? null;
-      },
-      removeItem(key) {
-        map.delete(key);
-      },
-      setItem(key, value) {
-        map.set(key, String(value));
-      },
-    };
-    return storage;
-  })();
-
-  if (typeof window === "undefined") return memoryStorage;
-  return window.localStorage;
-}
-
-export const DEFAULT_LOGO_DATA_URL =
-  "data:image/svg+xml;charset=utf-8," +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#22c55e"/>
-      <stop offset="1" stop-color="#14b8a6"/>
-    </linearGradient>
-  </defs>
-  <rect x="16" y="16" width="224" height="224" rx="48" fill="url(#g)"/>
-  <path d="M64 108c0-22.091 17.909-40 40-40h48c22.091 0 40 17.909 40 40v40c0 22.091-17.909 40-40 40h-48c-22.091 0-40-17.909-40-40v-40z" fill="rgba(0,0,0,0.15)"/>
-  <text x="128" y="148" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system" font-size="64" font-weight="800" fill="#ffffff">MI</text>
-</svg>`,
-  );
-
-export function resolveMadrasahLogo(profile?: MadrasahProfile | null): string {
-  const v = profile?.logoDataUrl;
-  return v && v.trim().length > 0 ? v : DEFAULT_LOGO_DATA_URL;
-}
+type UpsertResult =
+  | { ok: true; user?: AuthUser }
+  | { ok: false; reason: "FORBIDDEN" | "NOT_FOUND" | "ERROR" | "EMAIL_EXISTS"; message?: string };
 
 interface AuthState {
-  users: AuthUser[];
-  session: AuthSession | null;
-  audit: AuditLog[];
+  currentUser: AuthUser | null;
+  session: Session | null;
 
+  // Getters
   getCurrentUser: () => AuthUser | null;
   getDisplayIdentity: () => string;
-  seedDefaultAdmin: () => Promise<void>;
 
+  // Internal setters
+  _setUser: (user: AuthUser | null) => void;
+  _setSession: (session: Session | null) => void;
+
+  // Auth actions
+  initSession: () => Promise<void>;
   login: (email: string, password: string) => Promise<LoginResult>;
-  logout: () => void;
-
+  logout: () => Promise<void>;
   registerMadrasah: (input: {
     namaMadrasah: string;
     email: string;
@@ -200,19 +102,22 @@ interface AuthState {
     logoDataUrl?: string;
   }) => Promise<RegisterResult>;
 
+  // Admin actions
+  fetchPendingUsers: () => Promise<AuthUser[]>;
+  fetchAllMadrasah: () => Promise<AuthUser[]>;
+  approveMadrasah: (userId: string) => Promise<ApproveResult>;
+  disableUser: (userId: string) => Promise<UpsertResult>;
   adminCreateMadrasah: (input: {
     namaMadrasah: string;
     email: string;
     password: string;
     alamat?: string;
     kontak?: string;
-    logoDataUrl?: string;
   }) => Promise<UpsertResult>;
 
-  approveMadrasah: (userId: string) => ApproveResult;
-  disableUser: (userId: string) => UpsertResult;
-
-  updateMyProfile: (patch: Partial<MadrasahProfile>) => UpsertResult;
+  // Profile
+  updateMyProfile: (patch: Partial<MadrasahProfile>) => Promise<UpsertResult>;
+  seedDefaultAdmin: () => Promise<void>;
 }
 
 export const DEFAULT_ADMIN = {
@@ -223,303 +128,278 @@ export const DEFAULT_ADMIN = {
     "haikalrekapnilai60707295",
 };
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      users: ensureAdminSeed([]),
-      session: null,
-      audit: [],
+export const useAuthStore = create<AuthState>()((set, get) => ({
+  currentUser: null,
+  session: null,
 
-      getCurrentUser: () => {
-        const { session, users } = get();
-        if (!session) return null;
-        return users.find((u) => u.id === session.userId) ?? null;
+  getCurrentUser: () => get().currentUser,
+
+  getDisplayIdentity: () => {
+    const u = get().currentUser;
+    if (!u) return "—";
+    if (u.role === "admin") return "Admin";
+    return u.profile.namaMadrasah || "Madrasah";
+  },
+
+  _setUser: (user) => set({ currentUser: user }),
+  _setSession: (session) => set({ session }),
+
+  // Initialize session on app load
+  initSession: async () => {
+    const sb = getSupabase();
+    if (!sb) return;
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      set({ currentUser: null, session: null });
+      return;
+    }
+
+    set({ session });
+
+    // Fetch profile from DB
+    const { data: profile } = await sb
+      .from("madrasah_profiles")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+
+    if (profile) {
+      const user = dbProfileToAuthUser(profile as DbProfile, session.user.email ?? "");
+      set({ currentUser: user });
+    }
+
+    // Listen to auth changes
+    sb.auth.onAuthStateChange(async (event, newSession) => {
+      set({ session: newSession });
+      if (!newSession) {
+        set({ currentUser: null });
+        return;
+      }
+      const { data: p } = await sb
+        .from("madrasah_profiles")
+        .select("*")
+        .eq("id", newSession.user.id)
+        .single();
+      if (p) {
+        set({ currentUser: dbProfileToAuthUser(p as DbProfile, newSession.user.email) });
+      }
+    });
+  },
+
+  login: async (email, password) => {
+    const sb = getSupabase();
+    if (!sb) return { ok: false, reason: "NO_SUPABASE" };
+
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error || !data.user) {
+      return { ok: false, reason: "INVALID_CREDENTIALS" };
+    }
+
+    // Get profile to check status
+    const { data: profile } = await sb
+      .from("madrasah_profiles")
+      .select("*")
+      .eq("id", data.user.id)
+      .single();
+
+    if (!profile) return { ok: false, reason: "INVALID_CREDENTIALS" };
+
+    const p = profile as DbProfile;
+    if (p.status === "pending") {
+      await sb.auth.signOut();
+      return { ok: false, reason: "PENDING" };
+    }
+    if (p.status === "disabled") {
+      await sb.auth.signOut();
+      return { ok: false, reason: "DISABLED" };
+    }
+
+    const user = dbProfileToAuthUser(p, data.user.email ?? email);
+    set({ currentUser: user, session: data.session });
+    return { ok: true, user };
+  },
+
+  logout: async () => {
+    const sb = getSupabase();
+    if (sb) await sb.auth.signOut();
+    set({ currentUser: null, session: null });
+  },
+
+  registerMadrasah: async (input) => {
+    const sb = getSupabase();
+    if (!sb) return { ok: false, reason: "NO_SUPABASE" };
+
+    const { data, error } = await sb.auth.signUp({
+      email: input.email,
+      password: input.password,
+      options: {
+        data: {
+          nama_madrasah: input.namaMadrasah,
+        },
       },
+    });
 
-      getDisplayIdentity: () => {
-        const u = get().getCurrentUser();
-        if (!u) return "—";
-        if (u.role === "admin") return "Admin";
-        return u.profile.namaMadrasah || "Madrasah";
-      },
+    if (error) {
+      if (error.message.toLowerCase().includes("already registered") ||
+          error.message.toLowerCase().includes("already exists") ||
+          error.message.toLowerCase().includes("email")) {
+        return { ok: false, reason: "EMAIL_EXISTS" };
+      }
+      return { ok: false, reason: "ERROR", message: error.message };
+    }
 
-      seedDefaultAdmin: async () => {
-        const { users } = get();
-        const nextUsers = ensureAdminSeed(users);
-        const admin = nextUsers.find((u) => u.role === "admin")!;
-        const shouldPatchEmail =
-          normalizeEmail(admin.email) !== normalizeEmail(DEFAULT_ADMIN.email);
-        const desiredPasswordHash = await hashPassword(DEFAULT_ADMIN.email, DEFAULT_ADMIN.password);
-        const shouldPatchPassword = admin.passwordHash !== desiredPasswordHash;
-        let finalUsers = nextUsers;
-        if (shouldPatchEmail || shouldPatchPassword) {
-          const patched = touchUser(admin, {
-            email: DEFAULT_ADMIN.email,
-            passwordHash: desiredPasswordHash,
-          });
-          finalUsers = nextUsers.map((u) => (u.id === patched.id ? patched : u));
-        }
-        if (finalUsers !== users) set({ users: finalUsers });
-      },
+    if (!data.user) return { ok: false, reason: "ERROR", message: "Gagal mendaftar" };
 
-      login: async (email, password) => {
-        const e = normalizeEmail(email);
-        const { users } = get();
-        const user = users.find((u) => normalizeEmail(u.email) === e);
-        if (!user) return { ok: false, reason: "INVALID_CREDENTIALS" };
-        if (user.status === "pending") return { ok: false, reason: "PENDING" };
-        if (user.status === "disabled") return { ok: false, reason: "DISABLED" };
+    // Update profile with extra data (trigger creates it, we patch it)
+    await sb
+      .from("madrasah_profiles")
+      .update({
+        email: input.email.toLowerCase().trim(),
+        nama_madrasah: input.namaMadrasah.trim(),
+        alamat: input.alamat?.trim() ?? "",
+        kontak: input.kontak?.trim() ?? "",
+        logo_url: input.logoDataUrl ?? null,
+        status: "pending",
+        role: "madrasah",
+      })
+      .eq("id", data.user.id);
 
-        const passwordHash = await hashPassword(user.email, password);
-        if (passwordHash !== user.passwordHash) return { ok: false, reason: "INVALID_CREDENTIALS" };
+    // Sign out immediately — must wait for admin approval
+    await sb.auth.signOut();
+    return { ok: true };
+  },
 
-        const createdAt = nowIso();
-        const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString();
-        const session: AuthSession = {
-          userId: user.id,
-          token: crypto.randomUUID(),
-          createdAt,
-          expiresAt,
-        };
+  fetchPendingUsers: async () => {
+    const sb = getSupabase();
+    if (!sb) return [];
 
-        set((st) => ({
-          session,
-          users: st.users.map((u) =>
-            u.id === user.id ? touchUser(u, { lastLoginAt: createdAt }) : u,
-          ),
-          audit: [
-            { id: crypto.randomUUID(), at: createdAt, actorId: user.id, action: "AUTH_LOGIN" },
-            ...st.audit,
-          ].slice(0, 500),
-        }));
+    const { data } = await sb
+      .from("madrasah_profiles")
+      .select("*")
+      .eq("status", "pending")
+      .eq("role", "madrasah")
+      .order("created_at", { ascending: true });
 
-        return { ok: true, user: get().getCurrentUser()! };
-      },
+    if (!data) return [];
 
-      logout: () => {
-        const u = get().getCurrentUser();
-        const at = nowIso();
-        set((st) => ({
-          session: null,
-          audit: [
-            { id: crypto.randomUUID(), at, actorId: u?.id, action: "AUTH_LOGOUT" },
-            ...st.audit,
-          ].slice(0, 500),
-        }));
-      },
+    // Get emails from auth.users via admin API — not available with anon key
+    // We'll store email in madrasah_profiles instead — use a workaround
+    return (data as DbProfile[]).map((p) =>
+      dbProfileToAuthUser(p, p.id), // id as placeholder for email
+    );
+  },
 
-      registerMadrasah: async (input) => {
-        const email = normalizeEmail(input.email);
-        const { users } = get();
-        if (users.some((u) => normalizeEmail(u.email) === email)) {
-          return { ok: false, reason: "EMAIL_EXISTS" };
-        }
+  fetchAllMadrasah: async () => {
+    const sb = getSupabase();
+    if (!sb) return [];
 
-        const createdAt = nowIso();
-        const passwordHash = await hashPassword(email, input.password);
-        const user: AuthUser = {
-          id: crypto.randomUUID(),
-          role: "madrasah",
-          status: "pending",
-          email,
-          passwordHash,
-          profile: {
-            namaMadrasah: input.namaMadrasah.trim(),
-            alamat: input.alamat?.trim() ?? "",
-            kontak: input.kontak?.trim() ?? "",
-            logoDataUrl: input.logoDataUrl,
-          },
-          createdAt,
-          updatedAt: createdAt,
-        };
+    const { data } = await sb
+      .from("madrasah_profiles")
+      .select("*")
+      .eq("role", "madrasah")
+      .order("created_at", { ascending: false });
 
-        set((st) => ({
-          users: ensureAdminSeed([...st.users, user]),
-          audit: [
-            {
-              id: crypto.randomUUID(),
-              at: createdAt,
-              actorId: user.id,
-              action: "AUTH_REGISTER_MADRASAH",
-              targetId: user.id,
-              meta: { email: user.email, namaMadrasah: user.profile.namaMadrasah },
-            },
-            ...st.audit,
-          ].slice(0, 500),
-        }));
+    if (!data) return [];
+    return (data as DbProfile[]).map((p) => dbProfileToAuthUser(p, p.id));
+  },
 
-        return { ok: true, user };
-      },
+  approveMadrasah: async (userId) => {
+    const sb = getSupabase();
+    const admin = get().currentUser;
+    if (!sb || !admin || admin.role !== "admin") return { ok: false, reason: "FORBIDDEN" };
 
-      adminCreateMadrasah: async (input) => {
-        const admin = get().getCurrentUser();
-        if (!admin || admin.role !== "admin") return { ok: false, reason: "FORBIDDEN" };
+    const { error } = await sb
+      .from("madrasah_profiles")
+      .update({ status: "active" })
+      .eq("id", userId);
 
-        const email = normalizeEmail(input.email);
-        const { users } = get();
-        if (users.some((u) => normalizeEmail(u.email) === email)) {
-          return { ok: false, reason: "EMAIL_EXISTS" };
-        }
+    if (error) return { ok: false, reason: "ERROR" };
+    return { ok: true };
+  },
 
-        const createdAt = nowIso();
-        const passwordHash = await hashPassword(email, input.password);
-        const user: AuthUser = {
-          id: crypto.randomUUID(),
-          role: "madrasah",
-          status: "active",
-          email,
-          passwordHash,
-          profile: {
-            namaMadrasah: input.namaMadrasah.trim(),
-            alamat: input.alamat?.trim() ?? "",
-            kontak: input.kontak?.trim() ?? "",
-            logoDataUrl: input.logoDataUrl,
-          },
-          createdAt,
-          updatedAt: createdAt,
-        };
+  disableUser: async (userId) => {
+    const sb = getSupabase();
+    const admin = get().currentUser;
+    if (!sb || !admin || admin.role !== "admin") return { ok: false, reason: "FORBIDDEN" };
 
-        set((st) => ({
-          users: ensureAdminSeed([...st.users, user]),
-          audit: [
-            {
-              id: crypto.randomUUID(),
-              at: createdAt,
-              actorId: admin.id,
-              action: "ADMIN_CREATE_MADRASAH",
-              targetId: user.id,
-              meta: { email: user.email, namaMadrasah: user.profile.namaMadrasah },
-            },
-            ...st.audit,
-          ].slice(0, 500),
-        }));
+    const { error } = await sb
+      .from("madrasah_profiles")
+      .update({ status: "disabled" })
+      .eq("id", userId);
 
-        return { ok: true, user };
-      },
+    if (error) return { ok: false, reason: "ERROR" };
+    return { ok: true };
+  },
 
-      approveMadrasah: (userId) => {
-        const admin = get().getCurrentUser();
-        if (!admin || admin.role !== "admin") return { ok: false, reason: "FORBIDDEN" };
+  adminCreateMadrasah: async (input) => {
+    const sb = getSupabase();
+    const admin = get().currentUser;
+    if (!sb || !admin || admin.role !== "admin") return { ok: false, reason: "FORBIDDEN" };
 
-        const { users } = get();
-        const user = users.find((u) => u.id === userId);
-        if (!user) return { ok: false, reason: "NOT_FOUND" };
+    const { data, error } = await sb.auth.signUp({
+      email: input.email,
+      password: input.password,
+      options: { data: { nama_madrasah: input.namaMadrasah } },
+    });
 
-        const at = nowIso();
-        const patched = touchUser(user, { status: "active" });
-        set((st) => ({
-          users: st.users.map((u) => (u.id === userId ? patched : u)),
-          audit: [
-            {
-              id: crypto.randomUUID(),
-              at,
-              actorId: admin.id,
-              action: "ADMIN_APPROVE_MADRASAH",
-              targetId: userId,
-              meta: { email: user.email, namaMadrasah: user.profile.namaMadrasah },
-            },
-            ...st.audit,
-          ].slice(0, 500),
-        }));
+    if (error) {
+      if (error.message.toLowerCase().includes("already")) {
+        return { ok: false, reason: "EMAIL_EXISTS" };
+      }
+      return { ok: false, reason: "ERROR", message: error.message };
+    }
+    if (!data.user) return { ok: false, reason: "ERROR", message: "Gagal membuat akun" };
 
-        return { ok: true, user: patched };
-      },
+    await sb
+      .from("madrasah_profiles")
+      .update({
+        nama_madrasah: input.namaMadrasah.trim(),
+        alamat: input.alamat?.trim() ?? "",
+        kontak: input.kontak?.trim() ?? "",
+        status: "active",
+        role: "madrasah",
+      })
+      .eq("id", data.user.id);
 
-      disableUser: (userId) => {
-        const admin = get().getCurrentUser();
-        if (!admin || admin.role !== "admin") return { ok: false, reason: "FORBIDDEN" };
+    return { ok: true };
+  },
 
-        const { users, session } = get();
-        const user = users.find((u) => u.id === userId);
-        if (!user) return { ok: false, reason: "NOT_FOUND" };
+  updateMyProfile: async (patch) => {
+    const sb = getSupabase();
+    const user = get().currentUser;
+    if (!sb || !user) return { ok: false, reason: "FORBIDDEN" };
 
-        const at = nowIso();
-        const patched = touchUser(user, { status: "disabled" });
-        set((st) => ({
-          users: st.users.map((u) => (u.id === userId ? patched : u)),
-          session: session?.userId === userId ? null : session,
-          audit: [
-            {
-              id: crypto.randomUUID(),
-              at,
-              actorId: admin.id,
-              action: "ADMIN_DISABLE_USER",
-              targetId: userId,
-              meta: { email: user.email },
-            },
-            ...st.audit,
-          ].slice(0, 500),
-        }));
+    const update: Partial<DbProfile> = {};
+    if (patch.namaMadrasah !== undefined) update.nama_madrasah = patch.namaMadrasah.trim();
+    if (patch.alamat !== undefined) update.alamat = patch.alamat.trim();
+    if (patch.kontak !== undefined) update.kontak = patch.kontak.trim();
+    if (patch.logoDataUrl !== undefined) update.logo_url = patch.logoDataUrl;
+    if (patch.namaKepalaMadrasah !== undefined) update.kepala_madrasah = patch.namaKepalaMadrasah.trim();
+    if (patch.kelas !== undefined) update.kelas_format = patch.kelas.trim();
 
-        return { ok: true, user: patched };
-      },
+    const { error } = await sb
+      .from("madrasah_profiles")
+      .update(update)
+      .eq("id", user.id);
 
-      updateMyProfile: (patch) => {
-        const user = get().getCurrentUser();
-        if (!user) return { ok: false, reason: "FORBIDDEN" };
+    if (error) return { ok: false, reason: "ERROR", message: error.message };
 
-        const at = nowIso();
-        const nextProfile: MadrasahProfile = {
-          ...user.profile,
-          ...patch,
-          namaMadrasah: (patch.namaMadrasah ?? user.profile.namaMadrasah).trim(),
-          alamat: (patch.alamat ?? user.profile.alamat).trim(),
-          kontak: (patch.kontak ?? user.profile.kontak).trim(),
-          namaKepalaMadrasah: (patch.namaKepalaMadrasah ?? user.profile.namaKepalaMadrasah)?.trim(),
-          kelas: (patch.kelas ?? user.profile.kelas)?.trim(),
-          logoFileName: (patch.logoFileName ?? user.profile.logoFileName)?.trim(),
-        };
-        const patched = touchUser(user, { profile: nextProfile });
-        set((st) => ({
-          users: st.users.map((u) => (u.id === user.id ? patched : u)),
-          audit: [
-            {
-              id: crypto.randomUUID(),
-              at,
-              actorId: user.id,
-              action: "PROFILE_UPDATE",
-              targetId: user.id,
-              meta: { namaMadrasah: nextProfile.namaMadrasah },
-            },
-            ...st.audit,
-          ].slice(0, 500),
-        }));
+    // Refresh current user
+    const { data: newProfile } = await sb
+      .from("madrasah_profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
 
-        return { ok: true, user: patched };
-      },
-    }),
-    {
-      name: "rekap-auth-v1",
-      version: 1,
-      storage: createJSONStorage(() => safeStorage()),
-      migrate: (persistedState) => {
-        const st = persistedState as Partial<AuthState> | undefined;
-        const users = Array.isArray(st?.users) ? (st!.users as AuthUser[]) : [];
-        const audit = Array.isArray(st?.audit) ? (st!.audit as AuditLog[]) : [];
-        const session = (st?.session ?? null) as AuthSession | null;
+    if (newProfile) {
+      set({ currentUser: dbProfileToAuthUser(newProfile as DbProfile, user.email) });
+    }
 
-        const nextUsers = ensureAdminSeed(
-          users.filter((u) => u && typeof u === "object" && typeof (u as AuthUser).id === "string"),
-        );
+    return { ok: true };
+  },
 
-        const now = Date.now();
-        const validSession =
-          session &&
-          typeof session.expiresAt === "string" &&
-          Date.parse(session.expiresAt) > now &&
-          nextUsers.some((u) => u.id === session.userId && u.status === "active");
-
-        return {
-          users: nextUsers,
-          audit: audit.slice(0, 500),
-          session: validSession ? session : null,
-        } as AuthState;
-      },
-      partialize: (st) => ({
-        users: st.users,
-        session: st.session,
-        audit: st.audit,
-      }),
-    },
-  ),
-);
+  // For Supabase, admin seeding is done via Supabase Dashboard
+  // This is a no-op kept for interface compatibility
+  seedDefaultAdmin: async () => {},
+}));

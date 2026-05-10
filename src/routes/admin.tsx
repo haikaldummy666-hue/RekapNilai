@@ -1,8 +1,8 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { ShieldCheck, UserPlus, CheckCircle2, Ban, ScrollText } from "lucide-react";
+import { ShieldCheck, UserPlus, CheckCircle2, Ban, ScrollText, RefreshCw } from "lucide-react";
 import { PageCard, PageHeader } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { useAuthStore } from "@/stores/authStore";
+import { useAuthStore, type AuthUser } from "@/stores/authStore";
 import { getSupabase } from "@/lib/supabaseClient";
 
 export const Route = createFileRoute("/admin")({
@@ -41,17 +41,16 @@ function statusBadge(status: string) {
 function AdminPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.getCurrentUser());
-  const users = useAuthStore((s) => s.users);
-  const audit = useAuthStore((s) => s.audit);
+  const fetchPendingUsers = useAuthStore((s) => s.fetchPendingUsers);
+  const fetchAllMadrasah = useAuthStore((s) => s.fetchAllMadrasah);
   const approveMadrasah = useAuthStore((s) => s.approveMadrasah);
   const disableUser = useAuthStore((s) => s.disableUser);
   const adminCreateMadrasah = useAuthStore((s) => s.adminCreateMadrasah);
 
-  const pending = useMemo(
-    () => users.filter((u) => u.role === "madrasah" && u.status === "pending"),
-    [users],
-  );
-  const madrasahList = useMemo(() => users.filter((u) => u.role === "madrasah"), [users]);
+  const [pending, setPending] = useState<AuthUser[]>([]);
+  const [madrasahList, setMadrasahList] = useState<AuthUser[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const [loadingAll, setLoadingAll] = useState(false);
 
   const [namaMadrasah, setNamaMadrasah] = useState("");
   const [email, setEmail] = useState("");
@@ -61,11 +60,36 @@ function AdminPage() {
   const [creating, setCreating] = useState(false);
   const [testingSupabase, setTestingSupabase] = useState(false);
 
-  const canCreate = useMemo(() => {
-    return (
-      namaMadrasah.trim().length > 1 && email.trim().length > 3 && password.length >= 6 && !creating
-    );
-  }, [creating, email, namaMadrasah, password]);
+  const canCreate =
+    namaMadrasah.trim().length > 1 && email.trim().length > 3 && password.length >= 6 && !creating;
+
+  const loadPending = async () => {
+    setLoadingPending(true);
+    try {
+      const data = await fetchPendingUsers();
+      setPending(data);
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+
+  const loadAll = async () => {
+    setLoadingAll(true);
+    try {
+      const data = await fetchAllMadrasah();
+      setMadrasahList(data);
+    } finally {
+      setLoadingAll(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.role === "admin") {
+      void loadPending();
+      void loadAll();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   if (!user) {
     return (
@@ -91,7 +115,7 @@ function AdminPage() {
     <>
       <PageHeader
         title="Admin"
-        description="Approval pendaftaran, manajemen akun, dan audit trail."
+        description="Approval pendaftaran, manajemen akun, dan koneksi Supabase."
         actions={
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <ShieldCheck className="h-4 w-4 text-primary" />
@@ -102,19 +126,40 @@ function AdminPage() {
 
       <Tabs defaultValue="approval" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="approval">Approval</TabsTrigger>
+          <TabsTrigger value="approval">
+            Approval
+            {pending.length > 0 && (
+              <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground font-bold">
+                {pending.length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="create">Tambah Akun</TabsTrigger>
           <TabsTrigger value="users">Akun</TabsTrigger>
-          <TabsTrigger value="audit">Audit</TabsTrigger>
           <TabsTrigger value="supabase">Supabase</TabsTrigger>
         </TabsList>
 
+        {/* === TAB APPROVAL === */}
         <TabsContent value="approval">
           <PageCard
             title="Permintaan Pendaftaran"
-            description="Setujui akun madrasah yang menunggu."
+            description="Setujui akun madrasah yang menunggu approval."
           >
-            {pending.length === 0 ? (
+            <div className="mb-3 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={loadingPending}
+                onClick={() => void loadPending()}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loadingPending ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
+
+            {loadingPending ? (
+              <p className="text-sm text-muted-foreground">Memuat data…</p>
+            ) : pending.length === 0 ? (
               <p className="text-sm text-muted-foreground">Tidak ada pendaftaran pending.</p>
             ) : (
               <Table>
@@ -122,6 +167,8 @@ function AdminPage() {
                   <TableRow>
                     <TableHead>Madrasah</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Alamat</TableHead>
+                    <TableHead>Kontak</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
@@ -131,6 +178,12 @@ function AdminPage() {
                     <TableRow key={u.id}>
                       <TableCell className="font-medium">{u.profile.namaMadrasah}</TableCell>
                       <TableCell>{u.email}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {u.profile.alamat || "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {u.profile.kontak || "—"}
+                      </TableCell>
                       <TableCell>
                         <Badge className={statusBadge(u.status)}>{u.status}</Badge>
                       </TableCell>
@@ -138,10 +191,15 @@ function AdminPage() {
                         <Button
                           size="sm"
                           className="bg-gradient-primary text-primary-foreground"
-                          onClick={() => {
-                            const res = approveMadrasah(u.id);
-                            if (!res.ok) toast.error("Gagal approval");
-                            else toast.success("Akun disetujui");
+                          onClick={async () => {
+                            const res = await approveMadrasah(u.id);
+                            if (!res.ok) {
+                              toast.error("Gagal approval");
+                            } else {
+                              toast.success(`Akun ${u.profile.namaMadrasah} disetujui`);
+                              void loadPending();
+                              void loadAll();
+                            }
                           }}
                         >
                           <CheckCircle2 />
@@ -156,6 +214,7 @@ function AdminPage() {
           </PageCard>
         </TabsContent>
 
+        {/* === TAB TAMBAH AKUN === */}
         <TabsContent value="create">
           <PageCard title="Tambah Akun Madrasah" description="Akun dibuat langsung aktif.">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -218,6 +277,7 @@ function AdminPage() {
                   setPassword("");
                   setAlamat("");
                   setKontak("");
+                  void loadAll();
                 } finally {
                   setCreating(false);
                 }
@@ -229,9 +289,24 @@ function AdminPage() {
           </PageCard>
         </TabsContent>
 
+        {/* === TAB DAFTAR AKUN === */}
         <TabsContent value="users">
           <PageCard title="Daftar Akun Madrasah">
-            {madrasahList.length === 0 ? (
+            <div className="mb-3 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={loadingAll}
+                onClick={() => void loadAll()}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loadingAll ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
+
+            {loadingAll ? (
+              <p className="text-sm text-muted-foreground">Memuat data…</p>
+            ) : madrasahList.length === 0 ? (
               <p className="text-sm text-muted-foreground">Belum ada akun madrasah.</p>
             ) : (
               <Table>
@@ -251,15 +326,35 @@ function AdminPage() {
                       <TableCell>
                         <Badge className={statusBadge(u.status)}>{u.status}</Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right flex justify-end gap-2">
+                        {u.status === "pending" && (
+                          <Button
+                            size="sm"
+                            className="bg-gradient-primary text-primary-foreground"
+                            onClick={async () => {
+                              const res = await approveMadrasah(u.id);
+                              if (!res.ok) toast.error("Gagal approval");
+                              else {
+                                toast.success("Akun disetujui");
+                                void loadAll();
+                              }
+                            }}
+                          >
+                            <CheckCircle2 />
+                            Approve
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
                           disabled={u.status === "disabled"}
-                          onClick={() => {
-                            const res = disableUser(u.id);
+                          onClick={async () => {
+                            const res = await disableUser(u.id);
                             if (!res.ok) toast.error("Gagal menonaktifkan akun");
-                            else toast.success("Akun dinonaktifkan");
+                            else {
+                              toast.success("Akun dinonaktifkan");
+                              void loadAll();
+                            }
                           }}
                         >
                           <Ban />
@@ -274,6 +369,7 @@ function AdminPage() {
           </PageCard>
         </TabsContent>
 
+        {/* === TAB SUPABASE === */}
         <TabsContent value="supabase">
           <PageCard title="Supabase" description="Cek environment variables dan koneksi dasar.">
             <div className="space-y-3 text-sm">
@@ -309,51 +405,17 @@ function AdminPage() {
               >
                 {testingSupabase ? "Menguji…" : "Test Koneksi"}
               </Button>
-            </div>
-          </PageCard>
-        </TabsContent>
 
-        <TabsContent value="audit">
-          <PageCard title="Audit Trail" description="Log aktivitas terbaru (maks 500).">
-            {audit.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Belum ada aktivitas.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Waktu</TableHead>
-                    <TableHead>Aksi</TableHead>
-                    <TableHead>Actor</TableHead>
-                    <TableHead>Target</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {audit.slice(0, 200).map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {new Date(a.at).toLocaleString("id-ID")}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <ScrollText className="h-4 w-4 text-primary" />
-                          {a.action}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {a.actorId
-                          ? (users.find((u) => u.id === a.actorId)?.email ?? a.actorId)
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {a.targetId
-                          ? (users.find((u) => u.id === a.targetId)?.email ?? a.targetId)
-                          : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+              <div className="rounded-xl border border-border bg-muted/20 px-3 py-3 space-y-1">
+                <p className="font-medium">Setup Admin di Supabase</p>
+                <ol className="mt-1 space-y-1 text-xs text-muted-foreground list-decimal list-inside">
+                  <li>Buka Supabase Dashboard → Authentication → Users</li>
+                  <li>Create user dengan email admin</li>
+                  <li>Buka Table Editor → madrasah_profiles</li>
+                  <li>Set role = 'admin' dan status = 'active' untuk user tersebut</li>
+                </ol>
+              </div>
+            </div>
           </PageCard>
         </TabsContent>
       </Tabs>

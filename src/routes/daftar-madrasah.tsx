@@ -57,10 +57,16 @@ function DaftarMadrasahPage() {
     try {
       const res = await registerMadrasah({ ...parsed.data, logoDataUrl });
       if (!res.ok) {
-        toast.error("Email sudah terdaftar");
+        if (res.reason === "EMAIL_EXISTS") {
+          toast.error("Email sudah terdaftar");
+        } else if (res.reason === "NO_SUPABASE") {
+          toast.error("Koneksi Supabase belum dikonfigurasi. Hubungi admin.");
+        } else {
+          toast.error(res.message ?? "Gagal mendaftar");
+        }
         return;
       }
-      toast.success("Pendaftaran berhasil. Menunggu approval admin.");
+      toast.success("Pendaftaran berhasil! Menunggu approval admin.");
       await router.navigate({ to: "/login" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Gagal daftar");

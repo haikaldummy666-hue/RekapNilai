@@ -76,15 +76,15 @@ function RootComponent() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useAuthStore((s) => s.getCurrentUser());
-  const seedDefaultAdmin = useAuthStore((s) => s.seedDefaultAdmin);
+  const initSession = useAuthStore((s) => s.initSession);
 
   const isPublic = useMemo(() => {
     return pathname === "/login" || pathname === "/daftar-madrasah";
   }, [pathname]);
 
   useEffect(() => {
-    void seedDefaultAdmin();
-  }, [seedDefaultAdmin]);
+    void initSession();
+  }, [initSession]);
 
   useEffect(() => {
     if (!user && !isPublic) {
