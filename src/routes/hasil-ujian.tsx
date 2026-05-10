@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
@@ -54,7 +54,7 @@ function HasilUjianPage() {
   const [draft, setDraft] = useState<UjianDraft | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active) {
       baselineRef.current = null;
       draftRef.current = null;
@@ -68,7 +68,8 @@ function HasilUjianPage() {
     baselineRef.current = next;
     draftRef.current = next;
     setDraft(next);
-  }, [active]);
+  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
@@ -57,7 +57,9 @@ function KurmerPage() {
   const [draft, setDraft] = useState<KurmerDraft | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  // Gunakan useLayoutEffect + active?.id agar draft reset sinkron sebelum
+  // paint dan tidak reset ulang hanya karena nilai siswa sama diupdate.
+  useLayoutEffect(() => {
     if (!active) {
       baselineRef.current = null;
       draftRef.current = null;
@@ -68,7 +70,8 @@ function KurmerPage() {
     baselineRef.current = next;
     draftRef.current = next;
     setDraft(next);
-  }, [active]);
+  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;

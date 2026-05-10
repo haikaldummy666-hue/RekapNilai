@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Download, LoaderCircle, Save, Users } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -70,7 +70,7 @@ function IdentitasPage() {
   const [draft, setDraft] = useState<Identitas | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active) {
       baselineRef.current = null;
       draftRef.current = null;
@@ -80,7 +80,8 @@ function IdentitasPage() {
     baselineRef.current = active.identitas;
     draftRef.current = active.identitas;
     setDraft(active.identitas);
-  }, [active]);
+  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;

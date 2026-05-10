@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FileText, LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
@@ -42,7 +42,7 @@ function SKLPage() {
   const [peringkat, setPeringkat] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active) {
       baselineRef.current = undefined;
       setPeringkat("");
@@ -50,7 +50,8 @@ function SKLPage() {
     }
     baselineRef.current = active.nilai.peringkatKelas;
     setPeringkat(active.nilai.peringkatKelas ? String(active.nilai.peringkatKelas) : "");
-  }, [active]);
+  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const parsedPeringkat = useMemo(() => {
     const v = peringkat.trim();
