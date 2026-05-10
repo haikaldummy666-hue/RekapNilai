@@ -151,14 +151,45 @@ function DaftarSiswaPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="mx-auto w-full max-w-full">
       <PageHeader
         title="Daftar Siswa"
         description="Cari, filter, dan urutkan siswa. Klik siswa untuk melihat detail nilai."
       />
 
-      <PageCard title="Pencarian & Filter">
-        <div className="grid gap-3 md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+        {/* Sidebar: Class Filter */}
+        {classList.length > 0 && (
+          <div className="lg:sticky lg:top-20 h-fit space-y-2">
+            <h3 className="font-semibold text-sm px-2">Pilih Kelas</h3>
+            <div className="space-y-1">
+              <Button
+                size="sm"
+                variant={kelas === "all" ? "default" : "outline"}
+                onClick={() => setKelas("all")}
+                className={`w-full justify-start text-left ${kelas === "all" ? "bg-gradient-primary text-primary-foreground" : ""}`}
+              >
+                Semua ({students.length})
+              </Button>
+              {classList.map((k) => (
+                <Button
+                  key={k}
+                  size="sm"
+                  variant={kelas === k ? "default" : "outline"}
+                  onClick={() => setKelas(k)}
+                  className={`w-full justify-start text-left ${kelas === k ? "bg-gradient-primary text-primary-foreground" : ""}`}
+                >
+                  Kelas {k} ({classCountMap[k] || 0})
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Main Content */}
+        <div>
+          <PageCard title="Pencarian & Filter">
+        <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -168,20 +199,6 @@ function DaftarSiswaPage() {
               className="pl-9"
             />
           </div>
-
-          <Select value={kelas} onValueChange={(v) => setKelas(v)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Pilih kelas" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Kelas</SelectItem>
-              {classList.map((k) => (
-                <SelectItem key={k} value={k}>
-                  {k}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
 
           <Select value={metric} onValueChange={(v) => setMetric(v as Metric)}>
             <SelectTrigger>
@@ -367,6 +384,8 @@ function DaftarSiswaPage() {
           </Table>
         </div>
       </PageCard>
+        </div>
+      </div>
 
       {selected && (
         <StudentDetail
