@@ -576,11 +576,14 @@ export const useStudentStore = create<StudentState>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         if (state.students.length === 0) {
-          state.addStudent();
+          // Manually create a new student instead of calling addStudent() to avoid re-triggering rehydration
+          const freshStudent = newStudent();
+          state.students.push(freshStudent);
+          state.activeId = freshStudent.id;
           return;
         }
         if (!state.activeId) {
-          state.setActive(state.students[0]!.id);
+          state.activeId = state.students[0]!.id;
         }
       },
     },
