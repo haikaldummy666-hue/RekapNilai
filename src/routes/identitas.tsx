@@ -355,14 +355,14 @@ function IdentitasPage() {
               </Field>
               <Field label="Kelas" className="sm:col-span-2">
                 <Select
-                  value={draft?.kelas ?? ""}
-                  onValueChange={(v) => setField({ kelas: v })}
+                  value={draft?.kelas?.trim() || "__none__"}
+                  onValueChange={(v) => setField({ kelas: v === "__none__" ? "" : v })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Pilih kelas…" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Belum ditentukan —</SelectItem>
+                    <SelectItem value="__none__">— Belum ditentukan —</SelectItem>
                     {KELAS_OPTIONS.map((k) => (
                       <SelectItem key={k} value={k}>
                         {k}
