@@ -1,4 +1,5 @@
 import type { Subject } from "@/data/subjects";
+import type { NilaiHistoryLog } from "@/types/nilai.types";
 
 export interface Identitas {
   nisn: string;
@@ -31,5 +32,6 @@ export interface Student {
   id: string;
   identitas: Identitas;
   nilai: NilaiSiswa;
+  nilaiHistory: NilaiHistoryLog;
   updatedAt: string;
 }

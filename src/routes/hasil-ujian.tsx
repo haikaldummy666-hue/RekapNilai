@@ -180,7 +180,7 @@ function HasilUjianPage() {
               </TableHeader>
               <TableBody>
                 {SUBJECTS.map((s, i) => (
-                  <TableRow key={s}>
+                  <TableRow key={`${active.id}-${s}`}>
                     <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                     <TableCell className="font-medium">{s}</TableCell>
                     <TableCell className="text-center">

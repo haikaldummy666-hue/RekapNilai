@@ -8,6 +8,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Identitas, NilaiSiswa, Student } from "@/types/student.types";
+import type { NilaiHistoryEntry } from "@/types/nilai.types";
 import { emptyNilai, sampleStudent } from "@/data/sampleData";
 import type { Subject } from "@/data/subjects";
 
@@ -109,12 +110,29 @@ function newStudent(identitas?: Partial<Identitas>): Student {
     id: crypto.randomUUID(),
     identitas: { ...defaultIdentitas, ...identitas },
     nilai: emptyNilai(),
+    nilaiHistory: { entries: [] },
     updatedAt: new Date().toISOString(),
   };
 }
 
 function touch(s: Student): Student {
   return { ...s, updatedAt: new Date().toISOString() };
+}
+
+function addHistoryEntry(
+  s: Student,
+  entry: Omit<NilaiHistoryEntry, "timestamp">
+): Student {
+  return {
+    ...s,
+    nilaiHistory: {
+      entries: [
+        ...s.nilaiHistory.entries,
+        { ...entry, timestamp: new Date().toISOString() },
+      ],
+    },
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function sanitizeIdentitas(raw: unknown): Identitas | null {
@@ -184,7 +202,25 @@ function sanitizeStudent(raw: unknown): Student | null {
   if (!identitas) return null;
   const nilai = sanitizeNilai(r.nilai);
   const updatedAt = typeof r.updatedAt === "string" ? r.updatedAt : new Date().toISOString();
-  return { id, identitas, nilai, updatedAt };
+  
+  // Sanitize nilaiHistory
+  let nilaiHistory = { entries: [] as NilaiHistoryEntry[] };
+  if (
+    typeof r.nilaiHistory === "object" &&
+    r.nilaiHistory &&
+    Array.isArray((r.nilaiHistory as any).entries)
+  ) {
+    const entries = (r.nilaiHistory as any).entries;
+    nilaiHistory.entries = entries.filter((e: any) => {
+      return (
+        typeof e.timestamp === "string" &&
+        typeof e.type === "string" &&
+        (e.type === "kurmer" || e.type === "praktek" || e.type === "ujianTertulis" || e.type === "peringkat")
+      );
+    });
+  }
+  
+  return { id, identitas, nilai, nilaiHistory, updatedAt };
 }
 
 function isSnapshot(raw: unknown): raw is StudentStoreSnapshot {
@@ -239,42 +275,71 @@ export const useStudentStore = create<StudentState>()(
         set((st) => ({
           students: st.students.map((s) => {
             if (s.id !== id) return s;
+            const oldValue = s.nilai.kurmer[subject][field];
+            if (oldValue === value) return s; // No change
             const row = { ...s.nilai.kurmer[subject], [field]: value };
-            return touch({
-              ...s,
-              nilai: { ...s.nilai, kurmer: { ...s.nilai.kurmer, [subject]: row } },
-            });
+            return addHistoryEntry(
+              touch({
+                ...s,
+                nilai: { ...s.nilai, kurmer: { ...s.nilai.kurmer, [subject]: row } },
+              }),
+              {
+                type: "kurmer",
+                subject,
+                field,
+                oldValue,
+                newValue: value,
+              }
+            );
           }),
         })),
 
       updatePraktek: (id, subject, value) =>
         set((st) => ({
-          students: st.students.map((s) =>
-            s.id === id
-              ? touch({
-                  ...s,
-                  nilai: {
-                    ...s.nilai,
-                    praktek: { ...s.nilai.praktek, [subject]: value },
-                  },
-                })
-              : s,
-          ),
+          students: st.students.map((s) => {
+            if (s.id !== id) return s;
+            const oldValue = s.nilai.praktek[subject];
+            if (oldValue === value) return s; // No change
+            return addHistoryEntry(
+              touch({
+                ...s,
+                nilai: {
+                  ...s.nilai,
+                  praktek: { ...s.nilai.praktek, [subject]: value },
+                },
+              }),
+              {
+                type: "praktek",
+                subject,
+                oldValue,
+                newValue: value,
+              }
+            );
+          }),
         })),
 
       updateUjianTertulis: (id, subject, value) =>
         set((st) => ({
-          students: st.students.map((s) =>
-            s.id === id
-              ? touch({
-                  ...s,
-                  nilai: {
-                    ...s.nilai,
-                    ujianTertulis: { ...s.nilai.ujianTertulis, [subject]: value },
-                  },
-                })
-              : s,
-          ),
+          students: st.students.map((s) => {
+            if (s.id !== id) return s;
+            const oldValue = s.nilai.ujianTertulis[subject];
+            if (oldValue === value) return s; // No change
+            return addHistoryEntry(
+              touch({
+                ...s,
+                nilai: {
+                  ...s.nilai,
+                  ujianTertulis: { ...s.nilai.ujianTertulis, [subject]: value },
+                },
+              }),
+              {
+                type: "ujianTertulis",
+                subject,
+                oldValue,
+                newValue: value,
+              }
+            );
+          }),
         })),
 
       applyUjianKelasBulk: (updates) => {
@@ -297,10 +362,45 @@ export const useStudentStore = create<StudentState>()(
               return s;
             }
             updated++;
-            return touch({
+            let result = touch({
               ...s,
               nilai: { ...s.nilai, ujianTertulis: nextUjian, praktek: nextPraktek },
             });
+            
+            // Add history entries for changed values
+            if (upd.ujianTertulis) {
+              Object.entries(upd.ujianTertulis).forEach(([subject, newValue]) => {
+                if (newValue !== undefined) {
+                  const oldValue = s.nilai.ujianTertulis[subject as Subject];
+                  if (oldValue !== newValue) {
+                    result = addHistoryEntry(result, {
+                      type: "ujianTertulis",
+                      subject: subject as Subject,
+                      oldValue,
+                      newValue,
+                    });
+                  }
+                }
+              });
+            }
+            
+            if (upd.praktek) {
+              Object.entries(upd.praktek).forEach(([subject, newValue]) => {
+                if (newValue !== undefined) {
+                  const oldValue = s.nilai.praktek[subject as Subject];
+                  if (oldValue !== newValue) {
+                    result = addHistoryEntry(result, {
+                      type: "praktek",
+                      subject: subject as Subject,
+                      oldValue,
+                      newValue,
+                    });
+                  }
+                }
+              });
+            }
+            
+            return result;
           }),
         }));
         return { updated, skipped };
@@ -308,14 +408,82 @@ export const useStudentStore = create<StudentState>()(
 
       updatePeringkat: (id, value) =>
         set((st) => ({
-          students: st.students.map((s) =>
-            s.id === id ? touch({ ...s, nilai: { ...s.nilai, peringkatKelas: value } }) : s,
-          ),
+          students: st.students.map((s) => {
+            if (s.id !== id) return s;
+            const oldValue = s.nilai.peringkatKelas;
+            if (oldValue === value) return s; // No change
+            return addHistoryEntry(
+              touch({ ...s, nilai: { ...s.nilai, peringkatKelas: value } }),
+              {
+                type: "peringkat",
+                oldValue,
+                newValue: value,
+              }
+            );
+          }),
         })),
 
       setNilai: (id, nilai) =>
         set((st) => ({
-          students: st.students.map((s) => (s.id === id ? touch({ ...s, nilai }) : s)),
+          students: st.students.map((s) => {
+            if (s.id !== id) return s;
+            
+            let result: Student = { ...s, nilai };
+            const oldNilai = s.nilai;
+            
+            // Track kurmer changes
+            Object.entries(nilai.kurmer).forEach(([subject, newRow]) => {
+              const oldRow = oldNilai.kurmer[subject as Subject];
+              (["k5s1", "k5s2", "k6s1"] as const).forEach((field) => {
+                if (oldRow[field] !== newRow[field]) {
+                  result = addHistoryEntry(result, {
+                    type: "kurmer",
+                    subject: subject as Subject,
+                    field,
+                    oldValue: oldRow[field],
+                    newValue: newRow[field],
+                  });
+                }
+              });
+            });
+            
+            // Track praktek changes
+            Object.entries(nilai.praktek).forEach(([subject, newValue]) => {
+              const oldValue = oldNilai.praktek[subject as Subject];
+              if (oldValue !== newValue) {
+                result = addHistoryEntry(result, {
+                  type: "praktek",
+                  subject: subject as Subject,
+                  oldValue,
+                  newValue,
+                });
+              }
+            });
+            
+            // Track ujianTertulis changes
+            Object.entries(nilai.ujianTertulis).forEach(([subject, newValue]) => {
+              const oldValue = oldNilai.ujianTertulis[subject as Subject];
+              if (oldValue !== newValue) {
+                result = addHistoryEntry(result, {
+                  type: "ujianTertulis",
+                  subject: subject as Subject,
+                  oldValue,
+                  newValue,
+                });
+              }
+            });
+            
+            // Track peringkat changes
+            if (oldNilai.peringkatKelas !== nilai.peringkatKelas) {
+              result = addHistoryEntry(result, {
+                type: "peringkat",
+                oldValue: oldNilai.peringkatKelas,
+                newValue: nilai.peringkatKelas,
+              });
+            }
+            
+            return touch(result);
+          }),
         })),
 
       loadSample: () => {
@@ -325,9 +493,12 @@ export const useStudentStore = create<StudentState>()(
 
       resetActive: () =>
         set((st) => ({
-          students: st.students.map((s) =>
-            s.id === st.activeId ? touch({ ...s, nilai: emptyNilai() }) : s,
-          ),
+          students: st.students.map((s) => {
+            if (s.id !== st.activeId) return s;
+            
+            let result = touch({ ...s, nilai: emptyNilai(), nilaiHistory: { entries: [] } });
+            return result;
+          }),
         })),
 
       resetAll: () => set({ students: [], activeId: null }),

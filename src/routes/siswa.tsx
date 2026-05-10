@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ArrowDownUp, Search, UserCheck } from "lucide-react";
+import { ArrowDownUp, History, Search, UserCheck } from "lucide-react";
 import { PageCard, PageHeader } from "@/components/layout/PageCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { SUBJECTS, type Subject } from "@/data/subjects";
 import { useStudentStore } from "@/stores/studentStore";
 import type { Student } from "@/types/student.types";
-import type { Predikat } from "@/types/nilai.types";
+import type { Predikat, NilaiHistoryEntry } from "@/types/nilai.types";
 import {
   buildHasilAkhir,
   buildHasilUjian,
@@ -83,11 +83,23 @@ function DaftarSiswaPage() {
   const [query, setQuery] = useState("");
   const [metric, setMetric] = useState<Metric>("nilaiAkhir");
   const [gender, setGender] = useState<"all" | "L" | "P">("all");
+  const [kelas, setKelas] = useState<string>("all");
   const [predikat, setPredikat] = useState<"all" | Predikat>("all");
   const [peringkat, setPeringkat] = useState<"all" | "ada" | "kosong">("all");
   const [sortKey, setSortKey] = useState<"nama" | "nilai">("nama");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [historyStudent, setHistoryStudent] = useState<Student | null>(null);
+
+  // Extract unique class list
+  const classList = useMemo(() => {
+    const classes = new Set(
+      students
+        .map((s) => s.identitas.kelas)
+        .filter((k): k is string => Boolean(k && k.trim()))
+    );
+    return Array.from(classes).sort();
+  }, [students]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -117,6 +129,7 @@ function DaftarSiswaPage() {
     const filtered = enriched.filter((r) => {
       if (q && !r.search.includes(q)) return false;
       if (gender !== "all" && r.student.identitas.jenisKelamin !== gender) return false;
+      if (kelas !== "all" && r.student.identitas.kelas !== kelas) return false;
       if (predikat !== "all" && r.predikat !== predikat) return false;
       if (peringkat === "ada" && r.student.nilai.peringkatKelas === undefined) return false;
       if (peringkat === "kosong" && r.student.nilai.peringkatKelas !== undefined) return false;
@@ -130,7 +143,7 @@ function DaftarSiswaPage() {
     });
 
     return filtered;
-  }, [students, query, gender, predikat, peringkat, metric, sortKey, sortDir]);
+  }, [students, query, gender, kelas, predikat, peringkat, metric, sortKey, sortDir]);
 
   const selected = useMemo(
     () => (selectedId ? (students.find((s) => s.id === selectedId) ?? null) : null),
@@ -145,7 +158,7 @@ function DaftarSiswaPage() {
       />
 
       <PageCard title="Pencarian & Filter">
-        <div className="grid gap-3 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
+        <div className="grid gap-3 md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -155,6 +168,20 @@ function DaftarSiswaPage() {
               className="pl-9"
             />
           </div>
+
+          <Select value={kelas} onValueChange={(v) => setKelas(v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Pilih kelas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Kelas</SelectItem>
+              {classList.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {k}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Select value={metric} onValueChange={(v) => setMetric(v as Metric)}>
             <SelectTrigger>
@@ -299,6 +326,14 @@ function DaftarSiswaPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => setHistoryStudent(r.student)}
+                          title="Lihat history pengisian nilai"
+                        >
+                          <History className="mr-1 h-4 w-4" /> History
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => setSelectedId(r.student.id)}
                         >
                           Detail
@@ -340,6 +375,15 @@ function DaftarSiswaPage() {
           onOpenChange={(v) => setSelectedId(v ? selectedId : null)}
           isMobile={isMobile}
           onSetActive={() => setActive(selected.id)}
+        />
+      )}
+
+      {historyStudent && (
+        <StudentHistoryModal
+          student={historyStudent}
+          open={!!historyStudent}
+          onOpenChange={(open) => setHistoryStudent(open ? historyStudent : null)}
+          isMobile={isMobile}
         />
       )}
     </div>
@@ -598,5 +642,115 @@ function DetailTablePraktek({ student }: { student: Student }) {
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+function formatHistoryDescription(entry: NilaiHistoryEntry): string {
+  const timestamp = new Date(entry.timestamp).toLocaleString("id-ID", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  const typeLabel = {
+    kurmer: "Kurmer",
+    praktek: "Praktek",
+    ujianTertulis: "Ujian Tertulis",
+    peringkat: "Peringkat",
+  }[entry.type];
+
+  const oldVal = entry.oldValue ?? 0;
+  const newVal = entry.newValue ?? 0;
+
+  let desc = `${typeLabel}`;
+  if (entry.subject) {
+    desc += ` - ${entry.subject}`;
+    if (entry.field) {
+      desc += ` (${entry.field})`;
+    }
+  }
+  desc += `: ${oldVal} → ${newVal}`;
+
+  return `[${timestamp}] ${desc}`;
+}
+
+function StudentHistoryModal({
+  student,
+  open,
+  onOpenChange,
+  isMobile,
+}: {
+  student: Student;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  isMobile: boolean;
+}) {
+  const content = (
+    <div className="space-y-4">
+      <div>
+        <h3 className="font-semibold">
+          {student.identitas.nama || "(tanpa nama)"}
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          NISN: {student.identitas.nisn} | Kelas: {student.identitas.kelas || "-"}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-sm font-medium">History Pengisian Nilai</h4>
+        <div className="max-h-96 overflow-y-auto space-y-1 rounded-lg border border-border bg-muted/30 p-3">
+          {student.nilaiHistory.entries.length === 0 ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">
+              Belum ada history pengisian nilai
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {student.nilaiHistory.entries.map((entry, idx) => (
+                <div
+                  key={idx}
+                  className="rounded bg-card p-2 text-xs border-l-2 border-primary/30"
+                >
+                  <p className="font-mono text-muted-foreground">
+                    {formatHistoryDescription(entry)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Total: {student.nilaiHistory.entries.length} perubahan
+        </p>
+      </div>
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>History Nilai Siswa</DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 pb-6">
+            {content}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>History Pengisian Nilai Siswa</DialogTitle>
+        </DialogHeader>
+        {content}
+      </DialogContent>
+    </Dialog>
   );
 }

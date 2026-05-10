@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as _rootSpaRouteImport } from './routes/__root.spa'
 import { Route as SklIjazahRouteImport } from './routes/skl-ijazah'
 import { Route as SiswaRouteImport } from './routes/siswa'
 import { Route as ScanningRouteImport } from './routes/scanning'
@@ -24,6 +25,11 @@ import { Route as DaftarMadrasahRouteImport } from './routes/daftar-madrasah'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
+const _rootSpaRoute = _rootSpaRouteImport.update({
+  id: '/__root/spa',
+  path: '/spa',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SklIjazahRoute = SklIjazahRouteImport.update({
   id: '/skl-ijazah',
   path: '/skl-ijazah',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/scanning': typeof ScanningRoute
   '/siswa': typeof SiswaRoute
   '/skl-ijazah': typeof SklIjazahRoute
+  '/spa': typeof _rootSpaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/scanning': typeof ScanningRoute
   '/siswa': typeof SiswaRoute
   '/skl-ijazah': typeof SklIjazahRoute
+  '/spa': typeof _rootSpaRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   '/scanning': typeof ScanningRoute
   '/siswa': typeof SiswaRoute
   '/skl-ijazah': typeof SklIjazahRoute
+  '/__root/spa': typeof _rootSpaRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/scanning'
     | '/siswa'
     | '/skl-ijazah'
+    | '/spa'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/scanning'
     | '/siswa'
     | '/skl-ijazah'
+    | '/spa'
   id:
     | '__root__'
     | '/'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/scanning'
     | '/siswa'
     | '/skl-ijazah'
+    | '/__root/spa'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -210,10 +222,18 @@ export interface RootRouteChildren {
   ScanningRoute: typeof ScanningRoute
   SiswaRoute: typeof SiswaRoute
   SklIjazahRoute: typeof SklIjazahRoute
+  _rootSpaRoute: typeof _rootSpaRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/__root/spa': {
+      id: '/__root/spa'
+      path: '/spa'
+      fullPath: '/spa'
+      preLoaderRoute: typeof _rootSpaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/skl-ijazah': {
       id: '/skl-ijazah'
       path: '/skl-ijazah'
@@ -330,6 +350,7 @@ const rootRouteChildren: RootRouteChildren = {
   ScanningRoute: ScanningRoute,
   SiswaRoute: SiswaRoute,
   SklIjazahRoute: SklIjazahRoute,
+  _rootSpaRoute: _rootSpaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
