@@ -107,22 +107,24 @@ export function StudentSwitcher({
   return (
     <div className={cn("flex flex-wrap items-end gap-2", className)}>
       {/* ── Class filter dropdown (inline, same row) ── */}
-      {showClassFilter && allKelas.length > 0 && (
+      {showClassFilter && (
         <div className="flex flex-col gap-1">
           <span className="text-[10px] uppercase leading-none tracking-wide text-muted-foreground">
             Kelas
           </span>
           <Select value={selectedKelas} onValueChange={handleKelasChange}>
-            <SelectTrigger className={cn("h-9", compact ? "w-[110px] sm:w-[130px]" : "w-[130px] sm:w-[150px]")}>
-              <SelectValue placeholder="Semua" />
+            <SelectTrigger className={cn("h-9", selectWidth)}>
+              <SelectValue placeholder="Pilih kelas…" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Kelas</SelectItem>
-              {allKelas.map((k) => (
-                <SelectItem key={k} value={k}>
-                  Kelas {k}
-                </SelectItem>
-              ))}
+              {allKelas.map((k) => {
+                return (
+                  <SelectItem key={k} value={k}>
+                    {k}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>
