@@ -43,8 +43,10 @@ export function sampleStudent(): Student {
       tanggalLahir: "2014-03-22",
       namaAyah: "H. Muhammad Hakim",
       namaIbu: "Hj. Siti Aminah",
+      kelas: "6.A",
     },
     nilai: sampleNilai(),
+    nilaiHistory: { entries: [] },
     updatedAt: new Date().toISOString(),
   };
 }
