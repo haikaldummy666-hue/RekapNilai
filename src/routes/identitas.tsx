@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, LoaderCircle, Save, Users } from "lucide-react";
+import { Download, LoaderCircle, Save, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
@@ -60,7 +60,6 @@ function IdentitasPage() {
   const active = useActiveStudent();
   const students = useStudentStore((s) => s.students);
   const update = useStudentStore((s) => s.updateIdentitas);
-  const resetActive = useStudentStore((s) => s.resetActive);
   const addStudent = useStudentStore((s) => s.addStudent);
   const addStudentsBulk = useStudentStore((s) => s.addStudentsBulk);
   const inputSiswaRef = useRef<HTMLInputElement>(null);
@@ -150,6 +149,33 @@ function IdentitasPage() {
       setSaving(false);
     }
   }, [active, removeRouteDraft, students, update]);
+
+  const clearIdentitas = useCallback(() => {
+    if (!active) return;
+    const empty: Identitas = {
+      nisn: "",
+      noUjian: "",
+      nama: "",
+      jenisKelamin: "L",
+      tempatLahir: "",
+      tanggalLahir: "",
+      namaAyah: "",
+      namaIbu: "",
+      kelas: "",
+    };
+    try {
+      update(active.id, empty);
+      baselineRef.current = empty;
+      draftRef.current = empty;
+      draftOwnerRef.current = active.id;
+      setDraft(empty);
+      removeRouteDraft("/identitas", active.id);
+      toast.success("Data diri dibersihkan");
+    } catch (e) {
+      console.error(e);
+      toast.error("Gagal menghapus data diri");
+    }
+  }, [active, removeRouteDraft, update]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -241,19 +267,6 @@ function IdentitasPage() {
             <Button variant="outline" onClick={() => addStudent()}>
               + Siswa Baru
             </Button>
-            {active && (
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  if (confirm("Reset semua nilai siswa aktif?")) {
-                    resetActive();
-                    toast.success("Nilai direset");
-                  }
-                }}
-              >
-                Reset Nilai
-              </Button>
-            )}
           </>
         }
       />
@@ -275,7 +288,19 @@ function IdentitasPage() {
             title="Data Diri"
             actions={
               <div className="flex items-end gap-2">
-                <StudentSwitcher label="data siswa" showClassFilter />
+                <StudentSwitcher label="data siswa" showClassFilter showRemove={false} />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    (document.activeElement as HTMLElement | null)?.blur?.();
+                    clearIdentitas();
+                  }}
+                  aria-label="Hapus data diri"
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
                 <Button
                   onClick={save}
                   disabled={!isDirty || saving}

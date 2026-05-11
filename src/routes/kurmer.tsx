@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, Save } from "lucide-react";
+import { LoaderCircle, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
 import { StudentSwitcher } from "@/components/layout/StudentSwitcher";
@@ -100,6 +100,19 @@ function KurmerPage() {
     });
   }, [setRouteDraft]);
 
+  const clearDraft = useCallback(() => {
+    if (!active) return;
+    const cleared = {} as KurmerDraft;
+    SUBJECTS.forEach((s) => {
+      cleared[s] = { k5s1: 0, k5s2: 0, k6s1: 0 };
+    });
+    draftOwnerRef.current = active.id;
+    draftRef.current = cleared;
+    setDraft(cleared);
+    setRouteDraft("/kurmer", active.id, cleared as any);
+    toast.success("Nilai Kurmer dibersihkan");
+  }, [active, setRouteDraft]);
+
   const doSave = useCallback(async () => {
     if (!active) return;
     const current = draftRef.current;
@@ -161,6 +174,7 @@ function KurmerPage() {
                 label="data siswa"
                 showClassFilter
                 showAdd={false}
+                showRemove={false}
                 templateDownload={{
                   label: "Download template Raport Kurmer",
                   onClick: () => {
@@ -169,6 +183,18 @@ function KurmerPage() {
                   },
                 }}
               />
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  (document.activeElement as HTMLElement | null)?.blur?.();
+                  clearDraft();
+                }}
+                aria-label="Hapus nilai Kurmer"
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
               <Button
                 onClick={requestSave}
                 disabled={!isDirty || saving}

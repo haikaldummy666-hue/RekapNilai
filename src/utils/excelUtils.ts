@@ -659,6 +659,29 @@ function normalizeSubjectCol(subject: Subject, kind: "tertulis" | "praktek"): st
   return normalizeHeader(`${subject}${kind}`);
 }
 
+function displaySubjectTemplate(s: Subject): string {
+  if (s === "Pendidikan Pancasila") return "P.Pancasila";
+  if (s === "Bahasa Indonesia") return "Bindo";
+  return s;
+}
+
+function subjectFromTemplateHeader(raw: string): Subject | null {
+  const key = normalizeHeader(raw);
+  if (!key) return null;
+  const aliases: Record<string, Subject> = {
+    ppancasila: "Pendidikan Pancasila",
+    pendidikanpancasila: "Pendidikan Pancasila",
+    bindo: "Bahasa Indonesia",
+    bahasaindonesia: "Bahasa Indonesia",
+  };
+  if (aliases[key]) return aliases[key]!;
+  for (const s of SUBJECTS) {
+    if (normalizeHeader(s) === key) return s;
+    if (normalizeHeader(displaySubjectTemplate(s)) === key) return s;
+  }
+  return null;
+}
+
 function worksheetValueAt(ws: XLSX.WorkSheet, r: number, c: number): unknown {
   const addr = XLSX.utils.encode_cell({ r, c });
   const cell = ws[addr] as XLSX.CellObject | undefined;
@@ -684,25 +707,31 @@ export function downloadTemplateNilaiUjianKelasExcel(
   const instruksi = XLSX.utils.aoa_to_sheet([
     ["TEMPLATE NILAI UJIAN (KELAS)"],
     [],
-    ["Kolom yang boleh diedit:", "Semua kolom nilai (Tertulis/Praktek)."],
-    ["Kolom yang dikunci:", "No, Nama Siswa, NISN, Kelas."],
+    ["Kolom yang boleh diedit:", "Semua kolom nilai (V-1/V-2)."],
+    ["Kolom yang dikunci:", "No, NISN, Nama Lengkap, JK."],
     ["Aturan nilai:", "Angka 0–100 (hanya angka)."],
     ["Catatan:", "Proteksi adalah proteksi sheet (bukan password untuk membuka file)."],
   ]);
   instruksi["!cols"] = [{ wch: 24 }, { wch: 72 }];
   XLSX.utils.book_append_sheet(wb, instruksi, "Instruksi");
 
-  const header = nilaiUjianKelasHeaders();
+  const headerTop: (string | number)[] = ["No", "NISN", "Nama Lengkap", "JK"];
+  const headerSub: (string | number)[] = ["", "", "", ""];
+  for (const s of SUBJECTS) {
+    headerTop.push(displaySubjectTemplate(s), "");
+    headerSub.push("V-1", "V-2");
+  }
+
   const minRows = Math.max(50, students.length);
-  const rows: (string | number)[][] = [header];
+  const rows: (string | number)[][] = [headerTop, headerSub];
 
   for (let i = 0; i < minRows; i++) {
     const s = students[i];
     const no = i + 1;
-    const nama = s?.identitas.nama ?? "";
     const nisn = s?.identitas.nisn ?? "";
-    const kelas = "6";
-    const row: (string | number)[] = [no, nama, nisn, kelas];
+    const nama = s?.identitas.nama ?? "";
+    const jk = s?.identitas.jenisKelamin ?? "";
+    const row: (string | number)[] = [no, nisn, nama, jk];
     for (const subj of SUBJECTS) {
       row.push(s ? s.nilai.ujianTertulis[subj] : "", s ? s.nilai.praktek[subj] : "");
     }
@@ -710,28 +739,51 @@ export function downloadTemplateNilaiUjianKelasExcel(
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!freeze"] = { xSplit: 4, ySplit: 1 };
-  ws["!cols"] = autoCols(rows, [
-    4,
-    30,
-    16,
-    8,
-    ...Array.from({ length: SUBJECTS.length * 2 }).map(() => 14),
-  ]);
+  ws["!freeze"] = { xSplit: 4, ySplit: 2 };
+  ws["!cols"] = [
+    { wch: 4 },
+    { wch: 16 },
+    { wch: 30 },
+    { wch: 6 },
+    ...Array.from({ length: SUBJECTS.length * 2 }).map(() => ({ wch: 6 })),
+  ];
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+    { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
+    ...SUBJECTS.map((_, idx) => {
+      const start = 4 + idx * 2;
+      return { s: { r: 0, c: start }, e: { r: 0, c: start + 1 } };
+    }),
+  ] as XLSX.Range[];
 
-  for (let r = 1; r <= minRows; r++) {
-    ensureCell(ws, r, 2).z = "@";
+  const headerRows = 2;
+  for (let r = headerRows; r < headerRows + minRows; r++) {
+    ensureCell(ws, r, 1).z = "@";
   }
 
   const headerStyle = {
-    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
-    fill: { patternType: "solid", fgColor: { rgb: "1F8A70" } },
+    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "111827" } },
+    fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } },
     alignment: { vertical: "center", horizontal: "center", wrapText: true },
     border: {
-      top: { style: "thin", color: { rgb: "D0D5DD" } },
-      bottom: { style: "thin", color: { rgb: "D0D5DD" } },
-      left: { style: "thin", color: { rgb: "D0D5DD" } },
-      right: { style: "thin", color: { rgb: "D0D5DD" } },
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: true },
+  };
+  const subHeaderStyle = {
+    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "111827" } },
+    fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } },
+    alignment: { vertical: "center", horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
     },
     protection: { locked: true },
   };
@@ -739,10 +791,10 @@ export function downloadTemplateNilaiUjianKelasExcel(
     font: { name: "Calibri", sz: 11 },
     alignment: { vertical: "center", horizontal: "left" },
     border: {
-      top: { style: "thin", color: { rgb: "E5E7EB" } },
-      bottom: { style: "thin", color: { rgb: "E5E7EB" } },
-      left: { style: "thin", color: { rgb: "E5E7EB" } },
-      right: { style: "thin", color: { rgb: "E5E7EB" } },
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
     },
     protection: { locked: true },
   };
@@ -750,21 +802,28 @@ export function downloadTemplateNilaiUjianKelasExcel(
     font: { name: "Calibri", sz: 11 },
     alignment: { vertical: "center", horizontal: "center" },
     border: {
-      top: { style: "thin", color: { rgb: "E5E7EB" } },
-      bottom: { style: "thin", color: { rgb: "E5E7EB" } },
-      left: { style: "thin", color: { rgb: "E5E7EB" } },
-      right: { style: "thin", color: { rgb: "E5E7EB" } },
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
     },
     protection: { locked: false },
   };
 
-  for (let c = 0; c < header.length; c++) setStyle(ws, 0, c, headerStyle);
+  const lastCol = headerTop.length - 1;
+  for (let c = 0; c <= lastCol; c++) setStyle(ws, 0, c, headerStyle);
+  for (let c = 0; c <= lastCol; c++) setStyle(ws, 1, c, subHeaderStyle);
 
-  const lastCol = header.length - 1;
-  for (let r = 1; r <= minRows; r++) {
+  for (let r = headerRows; r < headerRows + minRows; r++) {
     for (let c = 0; c <= lastCol; c++) {
-      if (c <= 3) setStyle(ws, r, c, lockedStyle);
-      else setStyle(ws, r, c, unlockedStyle);
+      if (c <= 3) {
+        const style = { ...lockedStyle } as any;
+        if (c === 0 || c === 1 || c === 3) style.alignment = { vertical: "center", horizontal: "center" };
+        if (c === 2) style.alignment = { vertical: "center", horizontal: "left" };
+        setStyle(ws, r, c, style);
+      } else {
+        setStyle(ws, r, c, unlockedStyle);
+      }
     }
   }
 
@@ -791,6 +850,102 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
 
   const ws = wb.Sheets[sheetName];
   const arr = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true });
+
+  const norm = (v: unknown) => normalizeHeader(v);
+  const looksLikeVFormat = (v: unknown) => {
+    const k = norm(v);
+    return k === "v1" || k === "v-1" || k === "v2" || k === "v-2";
+  };
+
+  const maxScanV = Math.min(arr.length - 1, 15);
+  let vHeaderRow = -1;
+  for (let i = 0; i < maxScanV; i++) {
+    const row = (arr[i] ?? []) as unknown[];
+    const next = (arr[i + 1] ?? []) as unknown[];
+    const keys = new Set(row.map(norm));
+    const hasBase =
+      keys.has(norm("No")) &&
+      keys.has(norm("NISN")) &&
+      (keys.has(norm("Nama Lengkap")) || keys.has(norm("Nama Siswa"))) &&
+      keys.has(norm("JK"));
+    const nextHasV = next.some(looksLikeVFormat);
+    if (hasBase && nextHasV) {
+      vHeaderRow = i;
+      break;
+    }
+  }
+
+  if (vHeaderRow !== -1) {
+    const top = (arr[vHeaderRow] ?? []) as unknown[];
+    const sub = (arr[vHeaderRow + 1] ?? []) as unknown[];
+    const findCol = (label: string) => top.findIndex((x) => norm(x) === norm(label));
+    const idxNo = findCol("No");
+    const idxNisn = findCol("NISN");
+    const idxNama = findCol("Nama Lengkap") !== -1 ? findCol("Nama Lengkap") : findCol("Nama Siswa");
+    const idxJk = findCol("JK");
+    if ([idxNo, idxNisn, idxNama, idxJk].some((x) => x === -1)) {
+      return {
+        rows: [],
+        warnings,
+        errors: ["Header template Nilai Ujian tidak valid. Pastikan ada kolom: No, NISN, Nama Lengkap, JK."],
+      };
+    }
+
+    const maxCols = Math.max(top.length, sub.length);
+    const colMap: Array<{ col: number; subject: Subject; kind: "tertulis" | "praktek" }> = [];
+    for (let c = 0; c < maxCols; c++) {
+      const sk = norm(sub[c]);
+      if (sk !== "v1" && sk !== "v-1" && sk !== "v2" && sk !== "v-2") continue;
+      const kind = sk === "v2" || sk === "v-2" ? "praktek" : "tertulis";
+      const direct = str(top[c]).trim();
+      const subjRaw = direct ? direct : str(top[c - 1]).trim();
+      const subj = subjectFromTemplateHeader(subjRaw);
+      if (!subj) continue;
+      colMap.push({ col: c, subject: subj, kind });
+    }
+
+    if (colMap.length === 0) {
+      return {
+        rows: [],
+        warnings,
+        errors: ["Kolom mapel tidak ditemukan. Pastikan header mapel dan subheader V-1/V-2 ada."],
+      };
+    }
+
+    const rows: NilaiUjianKelasRow[] = [];
+    for (let r = vHeaderRow + 2; r < arr.length; r++) {
+      const row = (arr[r] ?? []) as unknown[];
+      const nama = str(worksheetValueAt(ws, r, idxNama) ?? row[idxNama]);
+      const nisn = str(worksheetValueAt(ws, r, idxNisn) ?? row[idxNisn])
+        .replace(/^'+/, "")
+        .trim();
+      const noRaw = worksheetValueAt(ws, r, idxNo) ?? row[idxNo];
+      const no = typeof noRaw === "number" ? Math.trunc(noRaw) : parseInt(str(noRaw), 10) || 0;
+
+      const isEmpty = !nama && !nisn;
+      if (isEmpty) continue;
+
+      const values: NilaiUjianKelasRow["values"] = {};
+      const rowErrors: string[] = [];
+      if (!nama) rowErrors.push("Nama Siswa kosong.");
+      if (!nisn) rowErrors.push("NISN kosong.");
+
+      for (const m of colMap) {
+        const v = clampNilaiOrNull(worksheetValueAt(ws, r, m.col) ?? row[m.col]);
+        if (v !== null) {
+          values[m.subject] = values[m.subject] ?? {};
+          values[m.subject]![m.kind] = v;
+        }
+        const raw = str(worksheetValueAt(ws, r, m.col) ?? row[m.col]).trim();
+        if (raw && v === null) {
+          rowErrors.push(`Nilai ${m.kind === "tertulis" ? "V-1" : "V-2"} ${m.subject} tidak valid (0–100).`);
+        }
+      }
+
+      rows.push({ excelRow: r + 1, no, nama, nisn, kelas: "", values, errors: rowErrors });
+    }
+    return { rows, warnings, errors };
+  }
 
   const expected = nilaiUjianKelasHeaders();
   const expectedNorm = expected.map(normalizeHeader);

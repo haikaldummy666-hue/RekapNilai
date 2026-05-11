@@ -138,6 +138,35 @@ describe("parseNilaiUjianKelasFromWorkbook", () => {
     expect(res.rows[0]!.values[first]!.praktek).toBe(0);
   });
 
+  it("parses V-1/V-2 two-row header template format", () => {
+    const headerTop = [
+      "No",
+      "NISN",
+      "Nama Lengkap",
+      "JK",
+      ...SUBJECTS.flatMap((s) => [s === "Pendidikan Pancasila" ? "P.Pancasila" : s === "Bahasa Indonesia" ? "Bindo" : s, ""]),
+    ];
+    const headerSub = ["", "", "", "", ...SUBJECTS.flatMap(() => ["V-1", "V-2"])];
+    const row1 = [
+      1,
+      "0012345678",
+      "Siswa A",
+      "L",
+      ...SUBJECTS.flatMap((s) => (s === SUBJECTS[0] ? [120, -5] : ["", ""])),
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headerTop, headerSub, row1]);
+    XLSX.utils.book_append_sheet(wb, ws, "Nilai Ujian");
+
+    const res = parseNilaiUjianKelasFromWorkbook(wb);
+    expect(res.errors).toHaveLength(0);
+    expect(res.rows).toHaveLength(1);
+    expect(res.rows[0]!.nisn).toBe("0012345678");
+    const first = SUBJECTS[0]!;
+    expect(res.rows[0]!.values[first]!.tertulis).toBe(100);
+    expect(res.rows[0]!.values[first]!.praktek).toBe(0);
+  });
+
   it("returns error when required columns are missing", () => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([

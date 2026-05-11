@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, Save } from "lucide-react";
+import { LoaderCircle, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
 import { StudentSwitcher } from "@/components/layout/StudentSwitcher";
@@ -89,6 +89,17 @@ function PraktekPage() {
     });
   }, [setRouteDraft]);
 
+  const clearDraft = useCallback(() => {
+    if (!active) return;
+    const cleared = {} as PraktekDraft;
+    SUBJECTS.forEach((s) => (cleared[s] = 0));
+    draftOwnerRef.current = active.id;
+    draftRef.current = cleared;
+    setDraft(cleared);
+    setRouteDraft("/praktek", active.id, cleared as any);
+    toast.success("Nilai praktek dibersihkan");
+  }, [active, setRouteDraft]);
+
   const total = useMemo(() => {
     if (!active) return 0;
     const src = draft ?? active.nilai.praktek;
@@ -156,6 +167,7 @@ function PraktekPage() {
                 label="data siswa"
                 showClassFilter
                 showAdd={false}
+                showRemove={false}
                 templateDownload={{
                   label: "Download template Ujian Praktek",
                   onClick: () => {
@@ -164,6 +176,18 @@ function PraktekPage() {
                   },
                 }}
               />
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  (document.activeElement as HTMLElement | null)?.blur?.();
+                  clearDraft();
+                }}
+                aria-label="Hapus nilai praktek"
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
               <Button
                 onClick={requestSave}
                 disabled={!isDirty || saving}
