@@ -49,14 +49,43 @@ export function ScanningReviewDialog({
 
   if (!sessionData) return null;
 
+  const formatValue = (v: unknown): string => {
+    if (v === null) return "null";
+    if (v === undefined) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
+    try {
+      const s = JSON.stringify(v);
+      return s.length > 400 ? `${s.slice(0, 400)}…` : s;
+    } catch {
+      return String(v);
+    }
+  };
+
   const handleStartEdit = (fieldName: string, value: any) => {
     setEditingField(fieldName);
-    setEditValue(value);
+    setEditValue(formatValue(value));
   };
 
   const handleSaveEdit = (fieldName: string) => {
+    const current = sessionData.reviewItems.find((i) => i.fieldName === fieldName);
+    const original = current?.ocrValue;
+    let nextValue: any = editValue;
+    if (typeof original === "number") {
+      const n = Number(editValue);
+      nextValue = Number.isFinite(n) ? n : original;
+    } else if (typeof original === "boolean") {
+      nextValue = String(editValue).trim().toLowerCase() === "true";
+    } else if (original && typeof original === "object") {
+      try {
+        nextValue = JSON.parse(String(editValue));
+      } catch {
+        nextValue = original;
+      }
+    }
+
     sessionData.reviewItems = sessionData.reviewItems.map((item) =>
-      item.fieldName === fieldName ? { ...item, ocrValue: editValue, status: "corrected" } : item,
+      item.fieldName === fieldName ? { ...item, ocrValue: nextValue, status: "corrected" } : item,
     );
     setEditingField(null);
     setEditValue(null);
@@ -139,7 +168,7 @@ export function ScanningReviewDialog({
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <p className="font-mono">{item.ocrValue}</p>
+                          <p className="font-mono">{formatValue(item.ocrValue)}</p>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -157,7 +186,9 @@ export function ScanningReviewDialog({
                         <p className="text-xs text-muted-foreground mb-1">
                           Nilai Sebelumnya
                         </p>
-                        <p className="font-mono text-muted-foreground">{item.currentValue}</p>
+                        <p className="font-mono text-muted-foreground">
+                          {formatValue(item.currentValue)}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -233,7 +264,7 @@ export function ScanningReviewDialog({
                     <p className="text-muted-foreground">{anomaly.description}</p>
                     {anomaly.value !== undefined && (
                       <p className="text-xs mt-2">
-                        Nilai: <span className="font-mono">{anomaly.value}</span>
+                        Nilai: <span className="font-mono">{formatValue(anomaly.value)}</span>
                       </p>
                     )}
                   </div>
