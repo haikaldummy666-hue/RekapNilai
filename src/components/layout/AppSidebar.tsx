@@ -44,6 +44,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/kurmer", label: "Raport Kurmer", icon: BookMarked },
       { to: "/praktek", label: "Ujian Praktek", icon: ClipboardList },
+      { to: "/ujian-tertulis", label: "Ujian Tertulis", icon: ScrollText },
       { to: "/hasil-ujian", label: "Hasil Ujian", icon: ScrollText },
     ],
   },

@@ -19,39 +19,39 @@ import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
 import { useAppStateStore } from "@/stores/appStateStore";
 import { formatNilai } from "@/utils/formatUtils";
-import { downloadTemplatePraktekExcel } from "@/utils/excelUtils";
+import { downloadTemplateUjianTertulisExcel } from "@/utils/excelUtils";
 
-export const Route = createFileRoute("/praktek")({
-  head: () => ({ meta: [{ title: "Ujian Praktek — Rekap Nilai MI" }] }),
-  component: PraktekPage,
+export const Route = createFileRoute("/ujian-tertulis")({
+  head: () => ({ meta: [{ title: "Ujian Tertulis — Rekap Nilai MI" }] }),
+  component: UjianTertulisPage,
 });
 
-type PraktekDraft = Record<Subject, number>;
+type TertulisDraft = Record<Subject, number>;
 
-function clonePraktek(src: PraktekDraft): PraktekDraft {
-  const out = {} as PraktekDraft;
+function cloneDraft(src: TertulisDraft): TertulisDraft {
+  const out = {} as TertulisDraft;
   SUBJECTS.forEach((s) => (out[s] = src[s] ?? 0));
   return out;
 }
 
-function isPraktekEqual(a: PraktekDraft, b: PraktekDraft): boolean {
+function isEqual(a: TertulisDraft, b: TertulisDraft): boolean {
   for (const s of SUBJECTS) {
     if ((a[s] ?? 0) !== (b[s] ?? 0)) return false;
   }
   return true;
 }
 
-function PraktekPage() {
+function UjianTertulisPage() {
   const active = useActiveStudent();
   const setNilai = useStudentStore((s) => s.setNilai);
-  const getDraft = useAppStateStore((s) => s.state.routes["/praktek"]?.drafts);
+  const getDraft = useAppStateStore((s) => s.state.routes["/ujian-tertulis"]?.drafts);
   const setRouteDraft = useAppStateStore((s) => s.setRouteDraft);
   const removeRouteDraft = useAppStateStore((s) => s.removeRouteDraft);
 
-  const baselineRef = useRef<PraktekDraft | null>(null);
-  const draftRef = useRef<PraktekDraft | null>(null);
+  const baselineRef = useRef<TertulisDraft | null>(null);
+  const draftRef = useRef<TertulisDraft | null>(null);
   const draftOwnerRef = useRef<string | null>(null);
-  const [draft, setDraft] = useState<PraktekDraft | null>(null);
+  const [draft, setDraft] = useState<TertulisDraft | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -62,8 +62,8 @@ function PraktekPage() {
       setDraft(null);
       return;
     }
-    const baseline = clonePraktek(active.nilai.praktek);
-    const saved = (getDraft?.[active.id] as any) as PraktekDraft | undefined;
+    const baseline = cloneDraft(active.nilai.ujianTertulis);
+    const saved = (getDraft?.[active.id] as any) as TertulisDraft | undefined;
     const next = saved ?? baseline;
     baselineRef.current = baseline;
     draftRef.current = next;
@@ -75,23 +75,26 @@ function PraktekPage() {
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;
-    return !isPraktekEqual(draft, baselineRef.current);
+    return !isEqual(draft, baselineRef.current);
   }, [draft]);
 
-  const setCell = useCallback((subject: Subject, value: number) => {
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, [subject]: value };
-      draftRef.current = next;
-      const owner = draftOwnerRef.current;
-      if (owner) setRouteDraft("/praktek", owner, next as any);
-      return next;
-    });
-  }, [setRouteDraft]);
+  const setCell = useCallback(
+    (subject: Subject, value: number) => {
+      setDraft((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, [subject]: value };
+        draftRef.current = next;
+        const owner = draftOwnerRef.current;
+        if (owner) setRouteDraft("/ujian-tertulis", owner, next as any);
+        return next;
+      });
+    },
+    [setRouteDraft],
+  );
 
   const total = useMemo(() => {
     if (!active) return 0;
-    const src = draft ?? active.nilai.praktek;
+    const src = draft ?? active.nilai.ujianTertulis;
     return SUBJECTS.reduce((a, s) => a + (src[s] ?? 0), 0);
   }, [active, draft]);
   const rata = total / SUBJECTS.length;
@@ -104,20 +107,20 @@ function PraktekPage() {
     for (const s of SUBJECTS) {
       const n = current[s] ?? 0;
       if (Number.isNaN(n) || n < 0 || n > 100) {
-        toast.error(`Nilai praktek ${s} harus 0–100`);
+        toast.error(`Nilai tertulis ${s} harus 0–100`);
         return;
       }
     }
 
     setSaving(true);
     try {
-      setNilai(active.id, { ...active.nilai, praktek: current });
+      setNilai(active.id, { ...active.nilai, ujianTertulis: current });
       baselineRef.current = current;
-      removeRouteDraft("/praktek", active.id);
-      toast.success("Nilai praktek disimpan");
+      removeRouteDraft("/ujian-tertulis", active.id);
+      toast.success("Nilai tertulis disimpan");
     } catch (e) {
       console.error(e);
-      toast.error("Gagal menyimpan nilai praktek");
+      toast.error("Gagal menyimpan nilai tertulis");
     } finally {
       setSaving(false);
     }
@@ -142,10 +145,7 @@ function PraktekPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      <PageHeader
-        title="Ujian Praktek"
-        description="Input nilai ujian praktek per mata pelajaran."
-      />
+      <PageHeader title="Ujian Tertulis" description="Input nilai ujian tertulis per mata pelajaran." />
       {!active ? (
         <EmptyStudent />
       ) : (
@@ -156,10 +156,10 @@ function PraktekPage() {
                 label="data siswa"
                 showClassFilter
                 templateDownload={{
-                  label: "Download template Ujian Praktek",
+                  label: "Download template Ujian Tertulis",
                   onClick: () => {
-                    downloadTemplatePraktekExcel();
-                    toast.success("Template Ujian Praktek diunduh");
+                    downloadTemplateUjianTertulisExcel();
+                    toast.success("Template Ujian Tertulis diunduh");
                   },
                 }}
               />
@@ -187,7 +187,7 @@ function PraktekPage() {
                 <TableRow>
                   <TableHead className="w-12">No</TableHead>
                   <TableHead>Mata Pelajaran</TableHead>
-                  <TableHead className="text-center">Nilai Praktek</TableHead>
+                  <TableHead className="text-center">Nilai Tertulis</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -197,9 +197,9 @@ function PraktekPage() {
                     <TableCell className="font-medium">{s}</TableCell>
                     <TableCell className="text-center">
                       <NilaiInput
-                        value={(currentDraft?.[s] ?? active.nilai.praktek[s] ?? 0) as number}
+                        value={(currentDraft?.[s] ?? active.nilai.ujianTertulis[s] ?? 0) as number}
                         onCommit={(v) => setCell(s, v)}
-                        ariaLabel={`Praktek ${s}`}
+                        ariaLabel={`Tertulis ${s}`}
                       />
                     </TableCell>
                   </TableRow>
@@ -219,3 +219,4 @@ function PraktekPage() {
     </div>
   );
 }
+

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2 } from "lucide-react";
 import { useStudentStore } from "@/stores/studentStore";
 import { useAuthStore } from "@/stores/authStore";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ export function StudentSwitcher({
   compact,
   showRemove = true,
   showClassFilter = false,
+  templateDownload,
   className,
 }: {
   label?: string;
@@ -25,6 +26,7 @@ export function StudentSwitcher({
   showRemove?: boolean;
   /** Show a class filter dropdown beside the student selector */
   showClassFilter?: boolean;
+  templateDownload?: { label: string; onClick: () => void };
   className?: string;
 }) {
   const students = useStudentStore((s) => s.students);
@@ -112,21 +114,34 @@ export function StudentSwitcher({
           <span className="text-[10px] uppercase leading-none tracking-wide text-muted-foreground">
             Kelas
           </span>
-          <Select value={selectedKelas} onValueChange={handleKelasChange}>
-            <SelectTrigger className={cn("h-9", selectWidth)}>
-              <SelectValue placeholder="Pilih kelas…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Kelas</SelectItem>
-              {allKelas.map((k) => {
-                return (
-                  <SelectItem key={k} value={k}>
-                    {k}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={selectedKelas} onValueChange={handleKelasChange}>
+              <SelectTrigger className={cn("h-9", selectWidth)}>
+                <SelectValue placeholder="Pilih kelas…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Kelas</SelectItem>
+                {allKelas.map((k) => {
+                  return (
+                    <SelectItem key={k} value={k}>
+                      {k}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            {templateDownload && (
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={templateDownload.onClick}
+                aria-label={templateDownload.label}
+                title={templateDownload.label}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       )}
 

@@ -21,6 +21,7 @@ import type { NilaiKurmerRow } from "@/types/student.types";
 import { Button } from "@/components/ui/button";
 import { formatNilai } from "@/utils/formatUtils";
 import { rataKurmerPerMapel } from "@/utils/calculateUtils";
+import { downloadTemplateKurmerExcel } from "@/utils/excelUtils";
 
 export const Route = createFileRoute("/kurmer")({
   head: () => ({ meta: [{ title: "Raport Kurmer — Rekap Nilai MI" }] }),
@@ -156,7 +157,17 @@ function KurmerPage() {
         <PageCard
           actions={
             <div className="flex items-end gap-2">
-              <StudentSwitcher label="data siswa" showClassFilter />
+              <StudentSwitcher
+                label="data siswa"
+                showClassFilter
+                templateDownload={{
+                  label: "Download template Raport Kurmer",
+                  onClick: () => {
+                    downloadTemplateKurmerExcel();
+                    toast.success("Template Raport Kurmer diunduh");
+                  },
+                }}
+              />
               <Button
                 onClick={requestSave}
                 disabled={!isDirty || saving}

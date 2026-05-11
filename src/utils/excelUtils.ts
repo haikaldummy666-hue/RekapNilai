@@ -114,6 +114,57 @@ export function downloadTemplateExcel(filename = "Template-Rekap-Nilai-MI.xlsx")
   triggerDownload(wb, filename);
 }
 
+function buildKurmerTemplateSheet(): XLSX.WorkSheet {
+  const kurmer: (string | number)[][] = [
+    ["No", "Mata Pelajaran", "Kelas 5 Sem 1", "Kelas 5 Sem 2", "Kelas 6 Sem 1"],
+    ...SUBJECTS.map((s, i) => [i + 1, s, "", "", ""]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(kurmer);
+  ws["!cols"] = [{ wch: 4 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  return ws;
+}
+
+function buildPraktekTemplateSheet(): XLSX.WorkSheet {
+  const praktek: (string | number)[][] = [
+    ["No", "Mata Pelajaran", "Nilai Praktek"],
+    ...SUBJECTS.map((s, i) => [i + 1, s, ""]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(praktek);
+  ws["!cols"] = [{ wch: 4 }, { wch: 24 }, { wch: 14 }];
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  return ws;
+}
+
+function buildUjianTertulisTemplateSheet(): XLSX.WorkSheet {
+  const ujian: (string | number)[][] = [
+    ["No", "Mata Pelajaran", "Nilai Tertulis"],
+    ...SUBJECTS.map((s, i) => [i + 1, s, ""]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(ujian);
+  ws["!cols"] = [{ wch: 4 }, { wch: 24 }, { wch: 14 }];
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  return ws;
+}
+
+export function downloadTemplateKurmerExcel(filename = "Template-Raport-Kurmer.xlsx") {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, buildKurmerTemplateSheet(), "Kurmer");
+  triggerDownload(wb, filename);
+}
+
+export function downloadTemplatePraktekExcel(filename = "Template-Ujian-Praktek.xlsx") {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, buildPraktekTemplateSheet(), "Praktek");
+  triggerDownload(wb, filename);
+}
+
+export function downloadTemplateUjianTertulisExcel(filename = "Template-Ujian-Tertulis.xlsx") {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, buildUjianTertulisTemplateSheet(), "Ujian Tertulis");
+  triggerDownload(wb, filename);
+}
+
 export function downloadTemplateSiswaExcel(filename = "Template-Upload-Siswa.xlsx") {
   const wb = XLSX.utils.book_new();
   const rows: (string | number)[][] = [
