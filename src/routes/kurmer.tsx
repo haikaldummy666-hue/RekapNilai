@@ -16,6 +16,7 @@ import {
 import { SUBJECTS, type Subject } from "@/data/subjects";
 import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
+import { useAppStateStore } from "@/stores/appStateStore";
 import type { NilaiKurmerRow } from "@/types/student.types";
 import { Button } from "@/components/ui/button";
 import { formatNilai } from "@/utils/formatUtils";
@@ -51,6 +52,9 @@ function isKurmerEqual(a: KurmerDraft, b: KurmerDraft): boolean {
 function KurmerPage() {
   const active = useActiveStudent();
   const setNilai = useStudentStore((s) => s.setNilai);
+  const getDraft = useAppStateStore((s) => s.state.routes["/kurmer"]?.drafts);
+  const setRouteDraft = useAppStateStore((s) => s.setRouteDraft);
+  const removeRouteDraft = useAppStateStore((s) => s.removeRouteDraft);
 
   const baselineRef = useRef<KurmerDraft | null>(null);
   const draftRef = useRef<KurmerDraft | null>(null);
@@ -66,8 +70,10 @@ function KurmerPage() {
       setDraft(null);
       return;
     }
-    const next = cloneKurmer(active.nilai.kurmer);
-    baselineRef.current = next;
+    const baseline = cloneKurmer(active.nilai.kurmer);
+    const saved = (getDraft?.[active.id] as any) as KurmerDraft | undefined;
+    const next = saved ?? baseline;
+    baselineRef.current = baseline;
     draftRef.current = next;
     draftOwnerRef.current = active.id;
     setDraft(next);
@@ -87,9 +93,11 @@ function KurmerPage() {
       if (!prev) return prev;
       const next = { ...prev, [subject]: { ...prev[subject], [field]: value } };
       draftRef.current = next;
+      const owner = draftOwnerRef.current;
+      if (owner) setRouteDraft("/kurmer", owner, next as any);
       return next;
     });
-  }, []);
+  }, [setRouteDraft]);
 
   const doSave = useCallback(async () => {
     if (!active) return;
@@ -109,6 +117,7 @@ function KurmerPage() {
     try {
       setNilai(active.id, { ...active.nilai, kurmer: current });
       baselineRef.current = current;
+      removeRouteDraft("/kurmer", active.id);
       toast.success("Nilai kurmer disimpan");
     } catch (e) {
       console.error(e);
@@ -116,7 +125,7 @@ function KurmerPage() {
     } finally {
       setSaving(false);
     }
-  }, [active, setNilai]);
+  }, [active, removeRouteDraft, setNilai]);
 
   const requestSave = useCallback(() => {
     (document.activeElement as HTMLElement | null)?.blur?.();

@@ -101,10 +101,12 @@ type UpsertResult =
 interface AuthState {
   currentUser: AuthUser | null;
   session: Session | null;
+  sessionInitialized: boolean;
 
   // Getters
   getCurrentUser: () => AuthUser | null;
   getDisplayIdentity: () => string;
+  isSessionInitialized: () => boolean;
 
   // Internal setters
   _setUser: (user: AuthUser | null) => void;
@@ -152,8 +154,10 @@ export const DEFAULT_ADMIN = {
 export const useAuthStore = create<AuthState>()((set, get) => ({
   currentUser: null,
   session: null,
+  sessionInitialized: false,
 
   getCurrentUser: () => get().currentUser,
+  isSessionInitialized: () => get().sessionInitialized,
 
   getDisplayIdentity: () => {
     const u = get().currentUser;
@@ -168,15 +172,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   // Initialize session on app load
   initSession: async () => {
     const sb = getSupabase();
-    if (!sb) return;
-
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      set({ currentUser: null, session: null });
+    if (!sb) {
+      set({ currentUser: null, session: null, sessionInitialized: true });
       return;
     }
 
-    set({ session });
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      set({ currentUser: null, session: null, sessionInitialized: true });
+      return;
+    }
+
+    set({ session, sessionInitialized: true });
 
     // Fetch profile from DB
     const { data: profile } = await sb
@@ -192,7 +199,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
     // Listen to auth changes
     sb.auth.onAuthStateChange(async (event, newSession) => {
-      set({ session: newSession });
+      set({ session: newSession, sessionInitialized: true });
       if (!newSession) {
         set({ currentUser: null });
         return;

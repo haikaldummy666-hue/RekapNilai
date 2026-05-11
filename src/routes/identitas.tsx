@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
+import { useAppStateStore } from "@/stores/appStateStore";
 import { formatTTL } from "@/utils/formatUtils";
 import type { Identitas } from "@/types/student.types";
 import { StudentSwitcher } from "@/components/layout/StudentSwitcher";
@@ -70,6 +71,9 @@ function IdentitasPage() {
   const draftOwnerRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<Identitas | null>(null);
   const [saving, setSaving] = useState(false);
+  const getDraft = useAppStateStore((s) => s.state.routes["/identitas"]?.drafts);
+  const setRouteDraft = useAppStateStore((s) => s.setRouteDraft);
+  const removeRouteDraft = useAppStateStore((s) => s.removeRouteDraft);
 
   useEffect(() => {
     if (!active) {
@@ -79,10 +83,12 @@ function IdentitasPage() {
       setDraft(null);
       return;
     }
+    const saved = (getDraft?.[active.id] as any) as Identitas | undefined;
+    const next = saved ?? active.identitas;
     baselineRef.current = active.identitas;
-    draftRef.current = active.identitas;
+    draftRef.current = next;
     draftOwnerRef.current = active.id;
-    setDraft(active.identitas);
+    setDraft(next);
   }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
@@ -96,9 +102,11 @@ function IdentitasPage() {
       if (!prev) return prev;
       const next = { ...prev, ...patch };
       draftRef.current = next;
+      const owner = draftOwnerRef.current;
+      if (owner) setRouteDraft("/identitas", owner, next as any);
       return next;
     });
-  }, []);
+  }, [setRouteDraft]);
 
   const save = useCallback(async () => {
     if (!active) return;
@@ -134,6 +142,7 @@ function IdentitasPage() {
       update(active.id, parsed.data);
       baselineRef.current = parsed.data;
       draftRef.current = parsed.data;
+      removeRouteDraft("/identitas", active.id);
       toast.success("Identitas disimpan");
     } catch (e) {
       console.error(e);
@@ -141,7 +150,7 @@ function IdentitasPage() {
     } finally {
       setSaving(false);
     }
-  }, [active, students, update]);
+  }, [active, removeRouteDraft, students, update]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

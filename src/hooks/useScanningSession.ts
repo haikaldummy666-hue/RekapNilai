@@ -2,7 +2,7 @@
  * Hook untuk mengelola scanning session
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type {
   DocumentScanRequest,
   OcrExtractionResult,
@@ -16,13 +16,45 @@ import {
   createScanningTransaction,
 } from "@/lib/databaseOperations";
 import type { Student } from "@/types/student.types";
+import { useAppStateStore } from "@/stores/appStateStore";
 
 export function useScanningSession() {
-  const [status, setStatus] = useState<
-    "idle" | "uploading" | "processing" | "review" | "applying" | "success" | "error"
-  >("idle");
-  const [sessionData, setSessionData] = useState<ScanningSessionData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const savedUi = useAppStateStore.getState().state.routes["/scanning"]?.ui as any;
+  const setRouteUi = useAppStateStore((s) => s.setRouteUi);
+
+  type ScanningStatus =
+    | "idle"
+    | "uploading"
+    | "processing"
+    | "review"
+    | "applying"
+    | "success"
+    | "error";
+
+  const [status, setStatus] = useState<ScanningStatus>(() => {
+    const v = savedUi?.status;
+    return v === "idle" ||
+      v === "uploading" ||
+      v === "processing" ||
+      v === "review" ||
+      v === "applying" ||
+      v === "success" ||
+      v === "error"
+      ? v
+      : "idle";
+  });
+  const [sessionData, setSessionData] = useState<ScanningSessionData | null>(() => {
+    const v = savedUi?.sessionData;
+    return v && typeof v === "object" ? (v as ScanningSessionData) : null;
+  });
+  const [error, setError] = useState<string | null>(() => {
+    const v = savedUi?.error;
+    return typeof v === "string" ? v : null;
+  });
+
+  useEffect(() => {
+    setRouteUi("/scanning", { status: status as any, sessionData: sessionData as any, error });
+  }, [error, sessionData, setRouteUi, status]);
 
   const processDocument = useCallback(
     async (request: DocumentScanRequest, currentStudent?: Student, useMockOCR?: boolean) => {
@@ -124,7 +156,8 @@ export function useScanningSession() {
     setStatus("idle");
     setSessionData(null);
     setError(null);
-  }, []);
+    setRouteUi("/scanning", { status: "idle", sessionData: null, error: null } as any);
+  }, [setRouteUi]);
 
   const updateReviewItem = useCallback((fieldName: string, updates: Partial<ReviewItem>) => {
     setSessionData((prev) =>

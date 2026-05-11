@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { ArrowDownUp, History, Search, UserCheck } from "lucide-react";
+import { z } from "zod";
 import { PageCard, PageHeader } from "@/components/layout/PageCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,8 +42,26 @@ import {
 } from "@/utils/calculateUtils";
 import { formatNilai } from "@/utils/formatUtils";
 
+const SiswaSearchSchema = z.object({
+  q: z.string().catch(""),
+  metric: z
+    .enum(["nilaiAkhir", "rataKurmer", "rataUjian", "ujianTertulis", "praktek"])
+    .catch("nilaiAkhir"),
+  gender: z.enum(["all", "L", "P"]).catch("all"),
+  kelas: z.string().catch("all"),
+  predikat: z.enum(["all", "Sangat Baik", "Baik", "Cukup", "Kurang"]).catch("all"),
+  peringkat: z.enum(["all", "ada", "kosong"]).catch("all"),
+  sortKey: z.enum(["nama", "nilai"]).catch("nama"),
+  sortDir: z.enum(["asc", "desc"]).catch("asc"),
+  selectedId: z.string().catch(""),
+  historyId: z.string().catch(""),
+  page: z.coerce.number().int().min(1).catch(1),
+  pageSize: z.coerce.number().int().min(5).max(200).catch(25),
+});
+
 export const Route = createFileRoute("/siswa")({
   head: () => ({ meta: [{ title: "Daftar Siswa — Rekap Nilai MI" }] }),
+  validateSearch: (search) => SiswaSearchSchema.parse(search),
   component: DaftarSiswaPage,
 });
 
@@ -88,16 +107,28 @@ function DaftarSiswaPage() {
   const setActive = useStudentStore((s) => s.setActive);
   const isMobile = useIsMobile();
 
-  const [query, setQuery] = useState("");
-  const [metric, setMetric] = useState<Metric>("nilaiAkhir");
-  const [gender, setGender] = useState<"all" | "L" | "P">("all");
-  const [kelas, setKelas] = useState<string>("all");
-  const [predikat, setPredikat] = useState<"all" | Predikat>("all");
-  const [peringkat, setPeringkat] = useState<"all" | "ada" | "kosong">("all");
-  const [sortKey, setSortKey] = useState<"nama" | "nilai">("nama");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [historyStudent, setHistoryStudent] = useState<Student | null>(null);
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+
+  const setSearch = (patch: Partial<typeof search>) => {
+    void navigate({
+      search: (prev) => ({ ...prev, ...patch }),
+      replace: true,
+    });
+  };
+
+  const query = search.q;
+  const metric = search.metric as Metric;
+  const gender = search.gender as "all" | "L" | "P";
+  const kelas = search.kelas;
+  const predikat = search.predikat as "all" | Predikat;
+  const peringkat = search.peringkat as "all" | "ada" | "kosong";
+  const sortKey = search.sortKey as "nama" | "nilai";
+  const sortDir = search.sortDir as "asc" | "desc";
+  const selectedId = search.selectedId.trim() ? search.selectedId : null;
+  const historyId = search.historyId.trim() ? search.historyId : null;
+  const page = search.page;
+  const pageSize = search.pageSize;
 
   // Extract unique class list
   const classList = useMemo(() => {
@@ -165,6 +196,23 @@ function DaftarSiswaPage() {
     [selectedId, students],
   );
 
+  const historyStudent = useMemo(
+    () => (historyId ? (students.find((s) => s.id === historyId) ?? null) : null),
+    [historyId, students],
+  );
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageSafe = Math.min(page, pageCount);
+
+  useEffect(() => {
+    if (pageSafe !== page) setSearch({ page: pageSafe });
+  }, [page, pageSafe]);
+
+  const pagedRows = useMemo(() => {
+    const start = (pageSafe - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [pageSafe, pageSize, rows]);
+
   return (
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
@@ -178,13 +226,13 @@ function DaftarSiswaPage() {
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => setSearch({ q: e.target.value, page: 1 })}
               placeholder="Cari nama / NISN / No Ujian…"
               className="pl-9"
             />
           </div>
 
-          <Select value={metric} onValueChange={(v) => setMetric(v as Metric)}>
+          <Select value={metric} onValueChange={(v) => setSearch({ metric: v as Metric, page: 1 })}>
             <SelectTrigger>
               <SelectValue placeholder="Pilih metrik" />
             </SelectTrigger>
@@ -197,7 +245,7 @@ function DaftarSiswaPage() {
             </SelectContent>
           </Select>
 
-          <Select value={kelas} onValueChange={(v) => setKelas(v)}>
+          <Select value={kelas} onValueChange={(v) => setSearch({ kelas: v, page: 1 })}>
             <SelectTrigger>
               <SelectValue placeholder="Kelas" />
             </SelectTrigger>
@@ -211,7 +259,10 @@ function DaftarSiswaPage() {
             </SelectContent>
           </Select>
 
-          <Select value={gender} onValueChange={(v) => setGender(v as "all" | "L" | "P")}>
+          <Select
+            value={gender}
+            onValueChange={(v) => setSearch({ gender: v as "all" | "L" | "P", page: 1 })}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Jenis kelamin" />
             </SelectTrigger>
@@ -222,7 +273,10 @@ function DaftarSiswaPage() {
             </SelectContent>
           </Select>
 
-          <Select value={predikat} onValueChange={(v) => setPredikat(v as "all" | Predikat)}>
+          <Select
+            value={predikat}
+            onValueChange={(v) => setSearch({ predikat: v as "all" | Predikat, page: 1 })}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Predikat" />
             </SelectTrigger>
@@ -237,7 +291,10 @@ function DaftarSiswaPage() {
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-          <Select value={peringkat} onValueChange={(v) => setPeringkat(v as typeof peringkat)}>
+          <Select
+            value={peringkat}
+            onValueChange={(v) => setSearch({ peringkat: v as typeof peringkat, page: 1 })}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Peringkat" />
             </SelectTrigger>
@@ -248,7 +305,7 @@ function DaftarSiswaPage() {
             </SelectContent>
           </Select>
 
-          <Select value={sortKey} onValueChange={(v) => setSortKey(v as typeof sortKey)}>
+          <Select value={sortKey} onValueChange={(v) => setSearch({ sortKey: v as typeof sortKey })}>
             <SelectTrigger>
               <SelectValue placeholder="Urutkan" />
             </SelectTrigger>
@@ -260,7 +317,7 @@ function DaftarSiswaPage() {
 
           <Button
             variant="outline"
-            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            onClick={() => setSearch({ sortDir: sortDir === "asc" ? "desc" : "asc" })}
             className="justify-center"
           >
             <ArrowDownUp className="mr-2 h-4 w-4" /> {sortDir === "asc" ? "Naik" : "Turun"}
@@ -273,6 +330,43 @@ function DaftarSiswaPage() {
         title={`Daftar (${rows.length})`}
         description={`Metrik tampilan: ${METRIC_LABEL[metric]}`}
       >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-muted-foreground">
+            Halaman {pageSafe} dari {pageCount} · {pageSize} baris/halaman
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSearch({ page: Math.max(1, pageSafe - 1) })}
+              disabled={pageSafe <= 1}
+            >
+              Sebelumnya
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSearch({ page: Math.min(pageCount, pageSafe + 1) })}
+              disabled={pageSafe >= pageCount}
+            >
+              Berikutnya
+            </Button>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => setSearch({ pageSize: Number(v), page: 1 })}
+            >
+              <SelectTrigger className="h-9 w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 / halaman</SelectItem>
+                <SelectItem value="25">25 / halaman</SelectItem>
+                <SelectItem value="50">50 / halaman</SelectItem>
+                <SelectItem value="100">100 / halaman</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -289,7 +383,7 @@ function DaftarSiswaPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r) => {
+              {pagedRows.map((r) => {
                 const isActive = r.student.id === activeId;
                 const fill = nilaiFillSummary(r.student.nilai);
                 const status = NILAI_STATUS_BADGE[fill.status];
@@ -297,7 +391,7 @@ function DaftarSiswaPage() {
                   <TableRow
                     key={r.student.id}
                     className="cursor-pointer"
-                    onClick={() => setSelectedId(r.student.id)}
+                    onClick={() => setSearch({ selectedId: r.student.id })}
                   >
                     <TableCell className="align-top">
                       <div className="flex items-start justify-between gap-3">
@@ -346,7 +440,7 @@ function DaftarSiswaPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setHistoryStudent(r.student)}
+                          onClick={() => setSearch({ historyId: r.student.id })}
                           title="Lihat history pengisian nilai"
                         >
                           <History className="mr-1 h-4 w-4" /> History
@@ -354,7 +448,7 @@ function DaftarSiswaPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setSelectedId(r.student.id)}
+                          onClick={() => setSearch({ selectedId: r.student.id })}
                         >
                           Detail
                         </Button>
@@ -392,7 +486,7 @@ function DaftarSiswaPage() {
         <StudentDetail
           student={selected}
           open={!!selectedId}
-          onOpenChange={(v) => setSelectedId(v ? selectedId : null)}
+          onOpenChange={(v) => setSearch({ selectedId: v ? selectedId ?? "" : "" })}
           isMobile={isMobile}
           onSetActive={() => setActive(selected.id)}
         />
@@ -402,7 +496,7 @@ function DaftarSiswaPage() {
         <StudentHistoryModal
           student={historyStudent}
           open={!!historyStudent}
-          onOpenChange={(open) => setHistoryStudent(open ? historyStudent : null)}
+          onOpenChange={(open) => setSearch({ historyId: open ? historyStudent.id : "" })}
           isMobile={isMobile}
         />
       )}

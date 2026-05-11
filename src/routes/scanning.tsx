@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { z } from "zod";
 import { Zap, History } from "lucide-react";
 import { PageCard, PageHeader } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -12,15 +12,30 @@ import { useStudentStore } from "@/stores/studentStore";
 import type { DocumentScanRequest } from "@/types/scanning.types";
 import { toast } from "sonner";
 
+const ScanningSearchSchema = z.object({
+  upload: z.string().catch("0"),
+  history: z.string().catch("0"),
+  mock: z.string().catch("0"),
+});
+
 export const Route = createFileRoute("/scanning")({
   head: () => ({ meta: [{ title: "Pindai Nilai — Rekap Nilai MI" }] }),
+  validateSearch: (search) => ScanningSearchSchema.parse(search),
   component: ScanningPage,
 });
 
 function ScanningPage() {
-  const [showUpload, setShowUpload] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [useMock, setUseMock] = useState(false);
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const setSearch = (patch: Partial<typeof search>) => {
+    void navigate({
+      search: (prev) => ({ ...prev, ...patch }),
+      replace: true,
+    });
+  };
+  const showUpload = search.upload === "1";
+  const showHistory = search.history === "1";
+  const useMock = search.mock === "1";
 
   const activeStudent = useStudentStore((s) => s.getActive());
   const updateIdentitas = useStudentStore((s) => s.updateIdentitas);
@@ -70,7 +85,7 @@ function ScanningPage() {
 
       toast.success("Data berhasil diterapkan ke sistem");
       reset();
-      setShowUpload(false);
+      setSearch({ upload: "0" });
     } catch (err) {
       toast.error("Gagal menerapkan data");
     }
@@ -123,7 +138,7 @@ function ScanningPage() {
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-3">
             <Button
-              onClick={() => setShowUpload(true)}
+              onClick={() => setSearch({ upload: "1" })}
               disabled={!activeStudent || status !== "idle"}
               className="gap-2"
             >
@@ -132,7 +147,7 @@ function ScanningPage() {
             </Button>
 
             <Button
-              onClick={() => setShowHistory(true)}
+              onClick={() => setSearch({ history: "1" })}
               variant="outline"
               className="gap-2"
             >
@@ -143,7 +158,7 @@ function ScanningPage() {
             {/* Development Toggle */}
             {process.env.NODE_ENV === "development" && (
               <Button
-                onClick={() => setUseMock(!useMock)}
+                onClick={() => setSearch({ mock: useMock ? "0" : "1" })}
                 variant="ghost"
                 size="sm"
                 className="text-xs"
@@ -156,7 +171,7 @@ function ScanningPage() {
           {/* Dialogs */}
           <DocumentUploadDialog
             open={showUpload}
-            onOpenChange={setShowUpload}
+            onOpenChange={(open) => setSearch({ upload: open ? "1" : "0" })}
             onDocumentSelected={handleDocumentSelected}
             isProcessing={status === "uploading" || status === "processing"}
           />
@@ -174,7 +189,7 @@ function ScanningPage() {
 
           <ScanningHistoryDialog
             open={showHistory}
-            onOpenChange={setShowHistory}
+            onOpenChange={(open) => setSearch({ history: open ? "1" : "0" })}
             studentId={activeStudent?.id}
           />
 

@@ -131,3 +131,60 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
 
+create table if not exists public.user_app_state (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  key text not null default 'default',
+  state jsonb not null default '{}'::jsonb,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, key)
+);
+
+drop trigger if exists trg_user_app_state_updated_at on public.user_app_state;
+create trigger trg_user_app_state_updated_at
+before update on public.user_app_state
+for each row execute function public.set_updated_at();
+
+alter table public.user_app_state enable row level security;
+
+drop policy if exists "user_app_state_crud_self" on public.user_app_state;
+create policy "user_app_state_crud_self"
+on public.user_app_state
+for all
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create or replace function public.upsert_user_app_state(p_key text, p_state jsonb)
+returns table (id uuid, user_id uuid, key text, updated_at timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.user_app_state (user_id, key, state, deleted_at)
+  values (auth.uid(), coalesce(p_key, 'default'), coalesce(p_state, '{}'::jsonb), null)
+  on conflict (user_id, key)
+  do update set state = excluded.state, deleted_at = null;
+
+  return query
+  select s.id, s.user_id, s.key, s.updated_at
+  from public.user_app_state s
+  where s.user_id = auth.uid() and s.key = coalesce(p_key, 'default');
+end;
+$$;
+
+create or replace function public.soft_delete_user_app_state(p_key text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.user_app_state
+  set deleted_at = now()
+  where user_id = auth.uid() and key = coalesce(p_key, 'default');
+end;
+$$;

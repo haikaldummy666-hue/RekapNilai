@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { SUBJECTS, type Subject } from "@/data/subjects";
 import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
+import { useAppStateStore } from "@/stores/appStateStore";
 import { formatNilai } from "@/utils/formatUtils";
 
 export const Route = createFileRoute("/praktek")({
@@ -42,6 +43,9 @@ function isPraktekEqual(a: PraktekDraft, b: PraktekDraft): boolean {
 function PraktekPage() {
   const active = useActiveStudent();
   const setNilai = useStudentStore((s) => s.setNilai);
+  const getDraft = useAppStateStore((s) => s.state.routes["/praktek"]?.drafts);
+  const setRouteDraft = useAppStateStore((s) => s.setRouteDraft);
+  const removeRouteDraft = useAppStateStore((s) => s.removeRouteDraft);
 
   const baselineRef = useRef<PraktekDraft | null>(null);
   const draftRef = useRef<PraktekDraft | null>(null);
@@ -57,8 +61,10 @@ function PraktekPage() {
       setDraft(null);
       return;
     }
-    const next = clonePraktek(active.nilai.praktek);
-    baselineRef.current = next;
+    const baseline = clonePraktek(active.nilai.praktek);
+    const saved = (getDraft?.[active.id] as any) as PraktekDraft | undefined;
+    const next = saved ?? baseline;
+    baselineRef.current = baseline;
     draftRef.current = next;
     draftOwnerRef.current = active.id;
     setDraft(next);
@@ -76,9 +82,11 @@ function PraktekPage() {
       if (!prev) return prev;
       const next = { ...prev, [subject]: value };
       draftRef.current = next;
+      const owner = draftOwnerRef.current;
+      if (owner) setRouteDraft("/praktek", owner, next as any);
       return next;
     });
-  }, []);
+  }, [setRouteDraft]);
 
   const total = useMemo(() => {
     if (!active) return 0;
@@ -104,6 +112,7 @@ function PraktekPage() {
     try {
       setNilai(active.id, { ...active.nilai, praktek: current });
       baselineRef.current = current;
+      removeRouteDraft("/praktek", active.id);
       toast.success("Nilai praktek disimpan");
     } catch (e) {
       console.error(e);
@@ -111,7 +120,7 @@ function PraktekPage() {
     } finally {
       setSaving(false);
     }
-  }, [active, setNilai]);
+  }, [active, removeRouteDraft, setNilai]);
 
   const requestSave = useCallback(() => {
     (document.activeElement as HTMLElement | null)?.blur?.();

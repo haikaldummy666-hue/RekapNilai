@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { SUBJECTS, type Subject } from "@/data/subjects";
 import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
+import { useAppStateStore } from "@/stores/appStateStore";
 import { rataUjianPerMapel } from "@/utils/calculateUtils";
 import { formatNilai } from "@/utils/formatUtils";
 
@@ -48,6 +49,9 @@ function isNilaiMapEqual(a: NilaiMap, b: NilaiMap): boolean {
 function HasilUjianPage() {
   const active = useActiveStudent();
   const setNilai = useStudentStore((s) => s.setNilai);
+  const getDraft = useAppStateStore((s) => s.state.routes["/hasil-ujian"]?.drafts);
+  const setRouteDraft = useAppStateStore((s) => s.setRouteDraft);
+  const removeRouteDraft = useAppStateStore((s) => s.removeRouteDraft);
 
   const baselineRef = useRef<UjianDraft | null>(null);
   const draftRef = useRef<UjianDraft | null>(null);
@@ -63,11 +67,13 @@ function HasilUjianPage() {
       setDraft(null);
       return;
     }
-    const next: UjianDraft = {
+    const baseline: UjianDraft = {
       tertulis: cloneNilaiMap(active.nilai.ujianTertulis),
       praktek: cloneNilaiMap(active.nilai.praktek),
     };
-    baselineRef.current = next;
+    const saved = (getDraft?.[active.id] as any) as UjianDraft | undefined;
+    const next = saved ?? baseline;
+    baselineRef.current = baseline;
     draftRef.current = next;
     draftOwnerRef.current = active.id;
     setDraft(next);
@@ -88,9 +94,11 @@ function HasilUjianPage() {
       if (!prev) return prev;
       const next = { ...prev, [kind]: { ...prev[kind], [subject]: value } };
       draftRef.current = next;
+      const owner = draftOwnerRef.current;
+      if (owner) setRouteDraft("/hasil-ujian", owner, next as any);
       return next;
     });
-  }, []);
+  }, [setRouteDraft]);
 
   const doSave = useCallback(async () => {
     if (!active) return;
@@ -114,6 +122,7 @@ function HasilUjianPage() {
         praktek: current.praktek,
       });
       baselineRef.current = current;
+      removeRouteDraft("/hasil-ujian", active.id);
       toast.success("Nilai ujian disimpan");
     } catch (e) {
       console.error(e);
@@ -121,7 +130,7 @@ function HasilUjianPage() {
     } finally {
       setSaving(false);
     }
-  }, [active, setNilai]);
+  }, [active, removeRouteDraft, setNilai]);
 
   const requestSave = useCallback(() => {
     (document.activeElement as HTMLElement | null)?.blur?.();
