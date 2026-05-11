@@ -11,7 +11,6 @@ import {
   User,
   UserCog,
   Users,
-  Zap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -46,7 +45,6 @@ const NAV_GROUPS = [
       { to: "/kurmer", label: "Raport Kurmer", icon: BookMarked },
       { to: "/praktek", label: "Ujian Praktek", icon: ClipboardList },
       { to: "/hasil-ujian", label: "Hasil Ujian", icon: ScrollText },
-      { to: "/scanning", label: "Pindai Nilai (AI)", icon: Zap },
     ],
   },
   {

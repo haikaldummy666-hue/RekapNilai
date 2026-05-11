@@ -30,10 +30,3 @@ test("siswa URL state (filter + modal) persists across refresh", async ({ page }
   await expect(page).toHaveURL(/selectedId=/);
   await expect(page.getByText("Jadikan Aktif")).toBeVisible();
 });
-
-test("scanning modal state persists across refresh", async ({ page }) => {
-  await page.goto("/scanning?upload=1");
-  await expect(page.getByText("Pindai Dokumen Nilai")).toBeVisible();
-  await page.reload();
-  await expect(page.getByText("Pindai Dokumen Nilai")).toBeVisible();
-});
