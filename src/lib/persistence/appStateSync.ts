@@ -1,6 +1,6 @@
 import { useStudentStore } from "@/stores/studentStore";
 import { useAppStateStore } from "@/stores/appStateStore";
-import { fetchUserAppState, type UserAppStatePayload } from "./userAppStateApi";
+import { fetchStudentsFromDb, fetchUserAppState, type UserAppStatePayload } from "./userAppStateApi";
 import { idbGet, idbSet } from "./indexedDb";
 
 function isoToMs(v: string | undefined | null): number {
@@ -16,6 +16,25 @@ function backupKey(userId: string, key: string) {
 export async function restoreBestEffort(userId: string, key = "default"): Promise<{
   source: "remote" | "indexeddb" | "none";
 }> {
+  const dbRows = await fetchStudentsFromDb();
+  if (dbRows.length > 0) {
+    useStudentStore.getState().importSnapshot(
+      {
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        students: dbRows.map((r) => ({
+          id: r.id,
+          identitas: (r as any).identitas ?? {},
+          nilai: (r as any).nilai ?? {},
+          nilaiHistory: (r as any).nilai_history ?? { entries: [] },
+          updatedAt: r.updated_at,
+        })),
+        activeId: null,
+      },
+      "merge",
+    );
+  }
+
   const remote = await fetchUserAppState(key);
   if (remote?.state) {
     await idbSet(backupKey(userId, key), remote.state as any);
@@ -74,4 +93,3 @@ export function applyPayload(payload: UserAppStatePayload) {
     useAppStateStore.setState({ state: app });
   }
 }
-

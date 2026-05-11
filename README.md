@@ -58,7 +58,7 @@ bun install   # atau: npm install
 bun dev       # atau: npm run dev
 ```
 
-Buka http://localhost:5173. Klik **Muat Data Contoh** di Dashboard untuk melihat aplikasi terisi.
+Buka http://localhost:5173.
 
 ## Deployment (Vercel)
 

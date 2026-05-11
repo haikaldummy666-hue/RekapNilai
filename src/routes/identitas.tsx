@@ -60,7 +60,6 @@ function IdentitasPage() {
   const active = useActiveStudent();
   const students = useStudentStore((s) => s.students);
   const update = useStudentStore((s) => s.updateIdentitas);
-  const loadSample = useStudentStore((s) => s.loadSample);
   const resetActive = useStudentStore((s) => s.resetActive);
   const addStudent = useStudentStore((s) => s.addStudent);
   const addStudentsBulk = useStudentStore((s) => s.addStudentsBulk);
@@ -241,15 +240,6 @@ function IdentitasPage() {
             </Button>
             <Button variant="outline" onClick={() => addStudent()}>
               + Siswa Baru
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                loadSample();
-                toast.success("Data contoh dimuat");
-              }}
-            >
-              Muat Data Contoh
             </Button>
             {active && (
               <Button

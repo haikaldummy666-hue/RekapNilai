@@ -9,7 +9,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Identitas, NilaiSiswa, Student } from "@/types/student.types";
 import type { NilaiHistoryEntry } from "@/types/nilai.types";
-import { emptyNilai, sampleStudent } from "@/data/sampleData";
+import { emptyNilai } from "@/data/sampleData";
 import type { Subject } from "@/data/subjects";
 
 const memoryStorage = (() => {
@@ -83,7 +83,6 @@ interface StudentState {
   setNilai: (id: string, nilai: NilaiSiswa) => void;
 
   // utilities
-  loadSample: () => void;
   resetActive: () => void;
   resetAll: () => void;
   exportSnapshot: () => StudentStoreSnapshot;
@@ -104,6 +103,24 @@ const defaultIdentitas: Identitas = {
   namaIbu: "",
   kelas: "",
 };
+
+function normalizeKey(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function findByNisnOrNoUjian(
+  students: Student[],
+  identitas?: Partial<Identitas>,
+): Student | null {
+  const nisn = normalizeKey(identitas?.nisn);
+  const noUjian = normalizeKey(identitas?.noUjian);
+  if (!nisn && !noUjian) return null;
+  return (
+    students.find((s) => (nisn ? normalizeKey(s.identitas.nisn) === nisn : false)) ??
+    students.find((s) => (noUjian ? normalizeKey(s.identitas.noUjian) === noUjian : false)) ??
+    null
+  );
+}
 
 function newStudent(identitas?: Partial<Identitas>): Student {
   return {
@@ -241,13 +258,37 @@ export const useStudentStore = create<StudentState>()(
       },
 
       addStudent: (identitas) => {
+        const existing = findByNisnOrNoUjian(get().students, identitas);
+        if (existing) {
+          set({ activeId: existing.id });
+          return existing.id;
+        }
         const s = newStudent(identitas);
         set((st) => ({ students: [...st.students, s], activeId: s.id }));
         return s.id;
       },
 
       addStudentsBulk: (identitasList) => {
-        const created = identitasList.map((identitas) => newStudent(identitas));
+        const existing = get().students;
+        const existingNisn = new Set(existing.map((s) => normalizeKey(s.identitas.nisn)).filter(Boolean));
+        const existingNoUjian = new Set(
+          existing.map((s) => normalizeKey(s.identitas.noUjian)).filter(Boolean),
+        );
+        const localNisn = new Set<string>();
+        const localNoUjian = new Set<string>();
+        const created: Student[] = [];
+        identitasList.forEach((identitas) => {
+          const nisn = normalizeKey(identitas?.nisn);
+          const noUjian = normalizeKey(identitas?.noUjian);
+          const dup =
+            (nisn && (existingNisn.has(nisn) || localNisn.has(nisn))) ||
+            (noUjian && (existingNoUjian.has(noUjian) || localNoUjian.has(noUjian)));
+          if (dup) return;
+          if (nisn) localNisn.add(nisn);
+          if (noUjian) localNoUjian.add(noUjian);
+          created.push(newStudent(identitas));
+        });
+        if (created.length === 0) return [];
         set((st) => ({
           students: [...st.students, ...created],
           activeId: created[created.length - 1]?.id ?? st.activeId,
@@ -486,11 +527,6 @@ export const useStudentStore = create<StudentState>()(
           }),
         })),
 
-      loadSample: () => {
-        const s = sampleStudent();
-        set((st) => ({ students: [...st.students, s], activeId: s.id }));
-      },
-
       resetActive: () =>
         set((st) => ({
           students: st.students.map((s) => {
@@ -575,14 +611,7 @@ export const useStudentStore = create<StudentState>()(
       },
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        if (state.students.length === 0) {
-          // Manually create a new student instead of calling addStudent() to avoid re-triggering rehydration
-          const freshStudent = newStudent();
-          state.students.push(freshStudent);
-          state.activeId = freshStudent.id;
-          return;
-        }
-        if (!state.activeId) {
+        if (state.students.length > 0 && !state.activeId) {
           state.activeId = state.students[0]!.id;
         }
       },
@@ -616,7 +645,18 @@ export function filterStudentsByKelas(
 export function setStudentStoreTenant(tenantKey: string) {
   const key = tenantKey.trim() ? tenantKey.trim() : "public";
   const name = `rekap-nilai-mi-v1:${key}`;
-  useStudentStore.setState({ students: [], activeId: null });
   useStudentStore.persist.setOptions({ name });
-  useStudentStore.persist.rehydrate();
+  const storage = useStudentStore.persist.getOptions().storage;
+  const maybe = storage?.getItem?.(name) as unknown;
+  const readExisting = async () => {
+    if (!maybe) return null;
+    if (typeof (maybe as any)?.then === "function") return await (maybe as Promise<any>);
+    return maybe as any;
+  };
+  return readExisting().then(async (existing) => {
+    await useStudentStore.persist.rehydrate();
+    if (existing == null) {
+      useStudentStore.setState({ students: [], activeId: null });
+    }
+  });
 }

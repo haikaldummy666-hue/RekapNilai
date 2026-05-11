@@ -44,7 +44,6 @@ const SHORTCUTS = [
 
 function Dashboard() {
   const studentsCount = useStudentStore((s) => s.students.length);
-  const loadSample = useStudentStore((s) => s.loadSample);
   const active = useActiveStudent();
 
   const rata = active ? rataKeseluruhan(active.nilai) : 0;
@@ -55,13 +54,6 @@ function Dashboard() {
       <PageHeader
         title="Dashboard"
         description="Ringkasan rekap nilai siswa kelas 6 Madrasah Ibtidaiyah."
-        actions={
-          studentsCount === 0 && (
-            <Button onClick={loadSample} className="bg-gradient-primary text-primary-foreground">
-              Muat Data Contoh
-            </Button>
-          )
-        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -20,6 +20,17 @@ export type UserAppStateRow = {
   deleted_at: string | null;
 };
 
+export type StudentDbRow = {
+  id: string;
+  madrasah_id: string;
+  identitas: unknown;
+  nilai: unknown;
+  nilai_history: unknown;
+  updated_at: string;
+  created_at: string;
+  deleted_at: string | null;
+};
+
 export async function fetchUserAppState(key = "default"): Promise<UserAppStateRow | null> {
   const sb = getSupabase();
   if (!sb) return null;
@@ -55,3 +66,30 @@ export async function softDeleteUserAppState(
   return { ok: true };
 }
 
+export async function fetchStudentsFromDb(): Promise<StudentDbRow[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("students")
+    .select("*")
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false });
+  if (error) return [];
+  return (data as any) ?? [];
+}
+
+export async function syncStudentsSnapshot(
+  students: unknown[],
+): Promise<{ ok: true; inserted: number; updated: number; softDeleted: number } | { ok: false; message: string }> {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, message: "NO_SUPABASE" };
+  const { data, error } = await sb.rpc("sync_students_snapshot", { p_students: students });
+  if (error) return { ok: false, message: error.message };
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    ok: true,
+    inserted: Number((row as any)?.inserted ?? 0),
+    updated: Number((row as any)?.updated ?? 0),
+    softDeleted: Number((row as any)?.soft_deleted ?? 0),
+  };
+}

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { debounce } from "@/lib/persistence/debounce";
 import { buildLocalPayload, persistBackupBestEffort } from "@/lib/persistence/appStateSync";
-import { upsertUserAppState } from "@/lib/persistence/userAppStateApi";
+import { syncStudentsSnapshot, upsertUserAppState } from "@/lib/persistence/userAppStateApi";
 import { useAppStateStore } from "@/stores/appStateStore";
 import { useStudentStore } from "@/stores/studentStore";
 
@@ -20,11 +20,17 @@ export function useAutoSaveUserState(userId: string | null, enabled: boolean) {
         const payload = buildLocalPayload();
         await persistBackupBestEffort(userId, payload);
         const res = await upsertUserAppState(payload);
+        const studentsRes = await syncStudentsSnapshot(payload.studentStore.students);
         if (res.ok) {
           useAppStateStore.getState().setSyncMeta({
             lastRemotePushAt: new Date().toISOString(),
           });
         } else {
+          useAppStateStore.getState().setSyncMeta({
+            lastRemoteErrorAt: new Date().toISOString(),
+          });
+        }
+        if (!studentsRes.ok) {
           useAppStateStore.getState().setSyncMeta({
             lastRemoteErrorAt: new Date().toISOString(),
           });
@@ -57,4 +63,3 @@ export function useAutoSaveUserState(userId: string | null, enabled: boolean) {
     };
   }, [enabled, userId]);
 }
-

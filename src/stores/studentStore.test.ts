@@ -9,8 +9,8 @@ import {
 import { nilaiFillSummary } from "@/utils/calculateUtils";
 
 describe("studentStore class helpers", () => {
-  it("collectKelasList returns unique trimmed sorted kelas", () => {
-    setStudentStoreTenant("test-kelas-1");
+  it("collectKelasList returns unique trimmed sorted kelas", async () => {
+    await setStudentStoreTenant("test-kelas-1");
     useStudentStore.setState({ students: [], activeId: null });
     useStudentStore.getState().addStudentsBulk([
       { nama: "A", kelas: "6.A" },
@@ -23,8 +23,8 @@ describe("studentStore class helpers", () => {
     expect(collectKelasList(students)).toEqual(["6.A", "6.B"]);
   });
 
-  it("filterStudentsByKelas filters only students in selected kelas", () => {
-    setStudentStoreTenant("test-kelas-2");
+  it("filterStudentsByKelas filters only students in selected kelas", async () => {
+    await setStudentStoreTenant("test-kelas-2");
     useStudentStore.setState({ students: [], activeId: null });
     useStudentStore.getState().addStudentsBulk([
       { nama: "A", kelas: "6.A" },
@@ -40,8 +40,8 @@ describe("studentStore class helpers", () => {
 });
 
 describe("studentStore nilai history isolation and status accuracy", () => {
-  it("history changes apply only to the targeted student and status matches current nilai", () => {
-    setStudentStoreTenant("test-history-1");
+  it("history changes apply only to the targeted student and status matches current nilai", async () => {
+    await setStudentStoreTenant("test-history-1");
     useStudentStore.setState({ students: [], activeId: null });
     const st = useStudentStore.getState();
     const [id1, id2] = st.addStudentsBulk([{ nama: "A", kelas: "6.A" }, { nama: "B", kelas: "6.A" }]);
@@ -63,3 +63,32 @@ describe("studentStore nilai history isolation and status accuracy", () => {
   });
 });
 
+describe("studentStore duplication guards", () => {
+  it("does not add duplicate student with same NISN", async () => {
+    await setStudentStoreTenant("test-dup-1");
+    useStudentStore.setState({ students: [], activeId: null });
+    const st = useStudentStore.getState();
+    const id1 = st.addStudent({ nama: "A", nisn: "001" });
+    const id2 = st.addStudent({ nama: "B", nisn: " 001 " });
+    expect(id2).toBe(id1);
+    expect(useStudentStore.getState().students).toHaveLength(1);
+  });
+
+  it("keeps stable student count after 10x tenant rehydrate loops (50 records)", async () => {
+    await setStudentStoreTenant("test-refresh-loop");
+    useStudentStore.setState({ students: [], activeId: null });
+    const st = useStudentStore.getState();
+    const payload = Array.from({ length: 50 }).map((_, i) => ({
+      nama: `S${i + 1}`,
+      nisn: String(10_000_000 + i),
+      kelas: "6.A",
+    }));
+    st.addStudentsBulk(payload);
+    expect(useStudentStore.getState().students).toHaveLength(50);
+
+    for (let i = 0; i < 10; i++) {
+      await setStudentStoreTenant("test-refresh-loop");
+      expect(useStudentStore.getState().students).toHaveLength(50);
+    }
+  });
+});

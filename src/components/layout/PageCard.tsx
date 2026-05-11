@@ -45,8 +45,7 @@ export function EmptyStudent() {
     <div className="glass rounded-2xl p-10 text-center shadow-soft">
       <p className="text-lg font-semibold">Belum ada siswa aktif</p>
       <p className="mt-1 text-sm text-muted-foreground">
-        Tambahkan siswa lewat tombol <kbd className="rounded bg-muted px-1.5">+</kbd> di kanan atas,
-        atau muat data contoh dari halaman Identitas.
+        Tambahkan siswa lewat tombol <kbd className="rounded bg-muted px-1.5">+</kbd> di kanan atas.
       </p>
     </div>
   );
