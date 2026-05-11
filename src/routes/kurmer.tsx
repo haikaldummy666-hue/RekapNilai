@@ -160,6 +160,7 @@ function KurmerPage() {
               <StudentSwitcher
                 label="data siswa"
                 showClassFilter
+                showAdd={false}
                 templateDownload={{
                   label: "Download template Raport Kurmer",
                   onClick: () => {

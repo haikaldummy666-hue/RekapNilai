@@ -155,6 +155,7 @@ function UjianTertulisPage() {
               <StudentSwitcher
                 label="data siswa"
                 showClassFilter
+                showAdd={false}
                 templateDownload={{
                   label: "Download template Ujian Tertulis",
                   onClick: () => {
@@ -219,4 +220,3 @@ function UjianTertulisPage() {
     </div>
   );
 }
-

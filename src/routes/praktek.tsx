@@ -155,6 +155,7 @@ function PraktekPage() {
               <StudentSwitcher
                 label="data siswa"
                 showClassFilter
+                showAdd={false}
                 templateDownload={{
                   label: "Download template Ujian Praktek",
                   onClick: () => {

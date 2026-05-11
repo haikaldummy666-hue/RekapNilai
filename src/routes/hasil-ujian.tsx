@@ -161,7 +161,7 @@ function HasilUjianPage() {
         <PageCard
           actions={
             <div className="flex items-end gap-2">
-              <StudentSwitcher label="data siswa" showClassFilter />
+              <StudentSwitcher label="data siswa" showClassFilter showAdd={false} />
               <Button
                 onClick={requestSave}
                 disabled={!isDirty || saving}

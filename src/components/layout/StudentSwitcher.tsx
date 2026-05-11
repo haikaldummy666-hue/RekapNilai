@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useStudentStore } from "@/stores/studentStore";
 import { useAuthStore } from "@/stores/authStore";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 export function StudentSwitcher({
   label,
   compact,
+  showAdd = true,
   showRemove = true,
   showClassFilter = false,
   templateDownload,
@@ -23,6 +24,7 @@ export function StudentSwitcher({
 }: {
   label?: string;
   compact?: boolean;
+  showAdd?: boolean;
   showRemove?: boolean;
   /** Show a class filter dropdown beside the student selector */
   showClassFilter?: boolean;
@@ -114,7 +116,18 @@ export function StudentSwitcher({
           <span className="text-[10px] uppercase leading-none tracking-wide text-muted-foreground">
             Kelas
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {templateDownload && (
+              <Button
+                variant="outline"
+                onClick={templateDownload.onClick}
+                aria-label={templateDownload.label}
+                title={templateDownload.label}
+                className={cn("h-9 justify-center whitespace-nowrap", selectWidth)}
+              >
+                Download Template
+              </Button>
+            )}
             <Select value={selectedKelas} onValueChange={handleKelasChange}>
               <SelectTrigger className={cn("h-9", selectWidth)}>
                 <SelectValue placeholder="Pilih kelas…" />
@@ -130,17 +143,6 @@ export function StudentSwitcher({
                 })}
               </SelectContent>
             </Select>
-            {templateDownload && (
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={templateDownload.onClick}
-                aria-label={templateDownload.label}
-                title={templateDownload.label}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            )}
           </div>
         </div>
       )}
@@ -175,9 +177,11 @@ export function StudentSwitcher({
       </div>
 
       {/* ── Action buttons ── */}
-      <Button size="icon" variant="outline" onClick={onAdd} aria-label="Tambah siswa">
-        <Plus className="h-4 w-4" />
-      </Button>
+      {showAdd && (
+        <Button size="icon" variant="outline" onClick={onAdd} aria-label="Tambah siswa">
+          <Plus className="h-4 w-4" />
+        </Button>
+      )}
       {showRemove && activeId && (
         <Button
           size="icon"
