@@ -31,7 +31,7 @@ export function StudentSwitcher({
   const activeId = useStudentStore((s) => s.activeId);
   const setActive = useStudentStore((s) => s.setActive);
   const addStudent = useStudentStore((s) => s.addStudent);
-  const removeStudent = useStudentStore((s) => s.removeStudent);
+  const resetActive = useStudentStore((s) => s.resetActive);
   const user = useAuthStore((s) => s.getCurrentUser());
 
   // Collect all unique non-empty classes from students, sorted
@@ -97,9 +97,9 @@ export function StudentSwitcher({
 
   const onRemove = () => {
     if (!activeId) return;
-    if (!confirm("Hapus siswa aktif?")) return;
-    removeStudent(activeId);
-    toast.success("Siswa dihapus");
+    if (!confirm("Hapus nilai siswa aktif (identitas tetap)?")) return;
+    resetActive();
+    toast.success("Nilai siswa dihapus");
   };
 
   const selectWidth = compact ? "w-[150px] sm:w-[190px]" : "w-[190px] sm:w-[230px]";
@@ -168,7 +168,7 @@ export function StudentSwitcher({
           size="icon"
           variant="ghost"
           onClick={onRemove}
-          aria-label="Hapus siswa aktif"
+          aria-label="Hapus nilai siswa aktif"
           className="text-destructive hover:text-destructive"
         >
           <Trash2 className="h-4 w-4" />

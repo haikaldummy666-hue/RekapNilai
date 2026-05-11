@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
-import { ArrowDownUp, History, Search, UserCheck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowDownUp, History, Search, Trash2, UserCheck } from "lucide-react";
 import { z } from "zod";
 import { PageCard, PageHeader } from "@/components/layout/PageCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
@@ -105,6 +106,7 @@ function DaftarSiswaPage() {
   const students = useStudentStore((s) => s.students);
   const activeId = useStudentStore((s) => s.activeId);
   const setActive = useStudentStore((s) => s.setActive);
+  const removeStudent = useStudentStore((s) => s.removeStudent);
   const isMobile = useIsMobile();
 
   const search = Route.useSearch();
@@ -212,6 +214,49 @@ function DaftarSiswaPage() {
     const start = (pageSafe - 1) * pageSize;
     return rows.slice(start, start + pageSize);
   }, [pageSafe, pageSize, rows]);
+
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const alive = new Set(students.map((s) => s.id));
+    setCheckedIds((prev) => prev.filter((id) => alive.has(id)));
+  }, [students]);
+
+  const pageIds = useMemo(() => pagedRows.map((r) => r.student.id), [pagedRows]);
+  const selectedCount = checkedIds.length;
+  const pageCheckedCount = useMemo(
+    () => pageIds.reduce((acc, id) => acc + (checkedIds.includes(id) ? 1 : 0), 0),
+    [checkedIds, pageIds],
+  );
+  const pageAllChecked = pageIds.length > 0 && pageCheckedCount === pageIds.length;
+  const pageIndeterminate = pageCheckedCount > 0 && pageCheckedCount < pageIds.length;
+
+  const toggleId = (id: string, next: boolean) => {
+    setCheckedIds((prev) => {
+      const has = prev.includes(id);
+      if (next && !has) return [...prev, id];
+      if (!next && has) return prev.filter((x) => x !== id);
+      return prev;
+    });
+  };
+
+  const togglePage = (next: boolean) => {
+    setCheckedIds((prev) => {
+      const set = new Set(prev);
+      pageIds.forEach((id) => {
+        if (next) set.add(id);
+        else set.delete(id);
+      });
+      return Array.from(set);
+    });
+  };
+
+  const bulkDelete = () => {
+    if (checkedIds.length === 0) return;
+    if (!confirm(`Hapus ${checkedIds.length} siswa terpilih?`)) return;
+    checkedIds.forEach((id) => removeStudent(id));
+    setCheckedIds([]);
+  };
 
   return (
     <div className="mx-auto w-full max-w-6xl">
@@ -335,6 +380,11 @@ function DaftarSiswaPage() {
             Halaman {pageSafe} dari {pageCount} · {pageSize} baris/halaman
           </div>
           <div className="flex items-center gap-2">
+            {selectedCount > 0 && (
+              <Button variant="destructive" size="sm" onClick={bulkDelete}>
+                <Trash2 className="mr-2 h-4 w-4" /> Hapus Terpilih ({selectedCount})
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -371,6 +421,15 @@ function DaftarSiswaPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={pageAllChecked ? true : pageIndeterminate ? "indeterminate" : false}
+                      onCheckedChange={(v) => togglePage(!!v)}
+                      aria-label="Pilih semua siswa di halaman ini"
+                    />
+                  </div>
+                </TableHead>
                 <TableHead className="min-w-[220px]">Siswa</TableHead>
                 <TableHead className="w-[130px] text-center">Rata-rata</TableHead>
                 {!isMobile &&
@@ -387,12 +446,25 @@ function DaftarSiswaPage() {
                 const isActive = r.student.id === activeId;
                 const fill = nilaiFillSummary(r.student.nilai);
                 const status = NILAI_STATUS_BADGE[fill.status];
+                const checked = checkedIds.includes(r.student.id);
                 return (
                   <TableRow
                     key={r.student.id}
                     className="cursor-pointer"
                     onClick={() => setSearch({ selectedId: r.student.id })}
                   >
+                    <TableCell
+                      className="align-top"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => toggleId(r.student.id, !!v)}
+                        aria-label={`Pilih ${r.nama}`}
+                      />
+                    </TableCell>
                     <TableCell className="align-top">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -468,7 +540,7 @@ function DaftarSiswaPage() {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={isMobile ? 3 : 2 + SUBJECTS.length + 1}
+                    colSpan={isMobile ? 4 : 3 + SUBJECTS.length + 1}
                     className="py-10 text-center"
                   >
                     <p className="text-sm text-muted-foreground">

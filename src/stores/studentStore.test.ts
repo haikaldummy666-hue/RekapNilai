@@ -91,4 +91,12 @@ describe("studentStore duplication guards", () => {
       expect(useStudentStore.getState().students).toHaveLength(50);
     }
   });
+
+  it("does not auto-create student on empty rehydrate", async () => {
+    await setStudentStoreTenant("test-empty-rehydrate");
+    useStudentStore.setState({ students: [], activeId: null });
+    await setStudentStoreTenant("test-empty-rehydrate");
+    expect(useStudentStore.getState().students).toHaveLength(0);
+    expect(useStudentStore.getState().activeId).toBeNull();
+  });
 });
