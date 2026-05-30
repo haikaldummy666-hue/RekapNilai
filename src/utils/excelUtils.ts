@@ -1,3 +1,9 @@
+import * as XLSX from "xlsx";
+import type { Subject } from "@/data/subjects";
+import { SUBJECTS } from "@/data/subjects";
+import type { Student, NilaiSiswa } from "@/types/student.types";
+import type { AvailableMulok } from "@/types/mulok.types";
+
 /**
  * Excel utilities (SheetJS).
  *
@@ -8,6 +14,15 @@
  * Catatan: SheetJS Community (xlsx) tidak mendukung styling kaya. Kami tetap
  * mengatur lebar kolom, freeze pane, dan format angka. Untuk warna sel,
  * kami menggunakan workbook properties yang didukung (cellStyles via XLSX
+ */
+
+/**
+ * Helper function to download workbook
+ */
+function triggerDownload(wb: XLSX.WorkBook, filename: string) {
+  XLSX.writeFile(wb, filename);
+}
+
 function buildNilaiUjianWorkbook(
   students: Student[],
   mulokList: AvailableMulok[] = ["Bahasa Sunda"],
@@ -168,20 +183,6 @@ function buildNilaiUjianWorkbook(
   return wb;
 }
 
-export function downloadTemplateNilaiUjianKelasExcel(
-  students: Student[],
-  filename = "Template-Nilai-Ujian-Kelas.xlsx",
-  mulokList: AvailableMulok[] = ["Bahasa Sunda"],
-) {
-  const wb = buildNilaiUjianWorkbook(students, mulokList, false);
-  const writeOptions: XLSX.WritingOptions & { cellStyles?: boolean } = {
-    bookType: "xlsx",
-    compression: true,
-    cellStyles: true,
-  };
-  XLSX.writeFile(wb, filename, writeOptions);
-}
-
 export function downloadTemplateNilaiUjianKelasLocked(
   students: Student[],
   filename = "Template-Nilai-Ujian-Kelas-Locked.xlsx",
@@ -196,22 +197,123 @@ export function downloadTemplateNilaiUjianKelasLocked(
   XLSX.writeFile(wb, filename, writeOptions);
 }
 
-  // Lock identity columns (A=0,B=1,C=2,D=3) for data rows
-  for (let r = 1; r <= range.e.r; r++) {
-    for (let c = 0; c <= 3; c++) {
-      const cell = ensureCell(ws, r, c);
-      if (!cell.s) cell.s = {};
-      (cell.s as any).locked = true;
-    }
+/**
+ * Build worksheet untuk template ujian tertulis kelas
+ */
+function buildUjianTertulisKelasTemplateSheet(
+  students: Array<{ nama: string; [key: string]: any }>,
+  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+): XLSX.WorkSheet {
+  const allSubjects = [...SUBJECTS, ...selectedMulok];
+  const headerTop: (string | number)[] = ["No", "NISN", "Nama", "JK"];
+  const headerSub: (string | number)[] = ["", "", "", ""];
+
+  for (const s of SUBJECTS) {
+    headerTop.push(displaySubjectTemplate(s), "");
+    headerSub.push("V-1", "V-2");
+  }
+  for (const m of selectedMulok) {
+    headerTop.push(displayMulokTemplate(m), "");
+    headerSub.push("V-1", "V-2");
   }
 
-  // Set number format for nilai cells and leave them unlocked
-  for (let r = 1; r <= range.e.r; r++) {
-    for (let c = 4; c < 4 + allSubjects.length; c++) {
-      const cell = ensureCell(ws, r, c);
-      if (!cell.s) cell.s = {};
-      delete (cell.s as any).locked;
-      cell.z = "0";
+  const rows: (string | number)[][] = [headerTop, headerSub];
+  for (let i = 0; i < students.length; i++) {
+    const s = students[i];
+    const row: (string | number)[] = [
+      i + 1,
+      s.identitas?.nisn ?? "",
+      s.nama ?? s.identitas?.nama ?? "",
+      s.identitas?.jenisKelamin ?? "",
+    ];
+    for (let j = 0; j < SUBJECTS.length; j++) {
+      row.push("", "");
+    }
+    for (let j = 0; j < selectedMulok.length; j++) {
+      row.push("", "");
+    }
+    rows.push(row);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const ensureCell = (r: number, c: number) => {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    let cell = ws[addr] as XLSX.CellObject | undefined;
+    if (!cell) {
+      cell = { t: "s", v: "" } as XLSX.CellObject;
+      ws[addr] = cell;
+    }
+    return cell;
+  };
+  const setStyle = (r: number, c: number, style: any) => {
+    const cell = ensureCell(r, c);
+    cell.s = style;
+  };
+
+  ws["!cols"] = Array(headerTop.length)
+    .fill(null)
+    .map(() => ({ wch: 12 }));
+  ws["!freeze"] = { xSplit: 4, ySplit: 2 };
+
+  const headerStyle = {
+    font: { bold: true, name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center", wrapText: true },
+    fill: { fgColor: { rgb: "CCCCCC" } },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: true },
+  };
+  const subHeaderStyle = {
+    font: { name: "Calibri", sz: 10 },
+    alignment: { vertical: "center", horizontal: "center" },
+    fill: { fgColor: { rgb: "E5E5E5" } },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: true },
+  };
+  const lockedStyle = {
+    font: { name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: true },
+  };
+  const unlockedStyle = {
+    font: { name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: false },
+    numFmt: "0",
+  };
+
+  const lastCol = headerTop.length - 1;
+  for (let c = 0; c <= lastCol; c++) setStyle(0, c, headerStyle);
+  for (let c = 0; c <= lastCol; c++) setStyle(1, c, subHeaderStyle);
+
+  for (let r = 2; r < rows.length; r++) {
+    for (let c = 0; c <= lastCol; c++) {
+      if (c <= 3) {
+        setStyle(r, c, lockedStyle);
+      } else {
+        setStyle(r, c, unlockedStyle);
+      }
     }
   }
 
@@ -331,6 +433,108 @@ export async function importUjianTertulisKelasFromExcel(
   return { results, warnings };
 }
 
+
+/**
+ * Download template ujian tertulis individual (tanpa daftar siswa)
+ * Template kosong untuk input nilai ujian tertulis satu siswa
+ */
+export function downloadTemplateUjianTertulisExcel(
+  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  filename = "Template-Ujian-Tertulis.xlsx",
+) {
+  const wb = XLSX.utils.book_new();
+  const allSubjects = [...SUBJECTS, ...selectedMulok];
+
+  const headerTop: (string | number)[] = ["No", "Mata Pelajaran", "V-1", "V-2"];
+  const rows: (string | number)[][] = [headerTop];
+
+  let rowNum = 1;
+  for (const s of SUBJECTS) {
+    rows.push([rowNum, displaySubjectTemplate(s), "", ""]);
+    rowNum++;
+  }
+  for (const m of selectedMulok) {
+    rows.push([rowNum, displayMulokTemplate(m), "", ""]);
+    rowNum++;
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const ensureCell = (r: number, c: number) => {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    let cell = ws[addr] as XLSX.CellObject | undefined;
+    if (!cell) {
+      cell = { t: "s", v: "" } as XLSX.CellObject;
+      ws[addr] = cell;
+    }
+    return cell;
+  };
+  const setStyle = (r: number, c: number, style: any) => {
+    const cell = ensureCell(r, c);
+    cell.s = style;
+  };
+
+  ws["!cols"] = [{ wch: 6 }, { wch: 30 }, { wch: 12 }, { wch: 12 }];
+  ws["!freeze"] = { xSplit: 2, ySplit: 1 };
+
+  const headerStyle = {
+    font: { bold: true, name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    fill: { fgColor: { rgb: "CCCCCC" } },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: true },
+  };
+  const dataStyle = {
+    font: { name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: false },
+    numFmt: "0",
+  };
+
+  for (let c = 0; c < 4; c++) {
+    setStyle(0, c, headerStyle);
+  }
+
+  for (let r = 1; r < rows.length; r++) {
+    setStyle(r, 0, dataStyle);
+    setStyle(r, 1, { ...dataStyle, protection: { locked: true } });
+    setStyle(r, 2, dataStyle);
+    setStyle(r, 3, dataStyle);
+  }
+
+  ws["!protect"] = {
+    sheet: true,
+    content: true,
+    objects: false,
+    scenarios: false,
+    formatCells: false,
+    formatColumns: false,
+    formatRows: false,
+    insertColumns: false,
+    insertRows: false,
+    insertHyperlinks: false,
+    deleteColumns: false,
+    deleteRows: false,
+    selectLockedCells: false,
+    selectUnlockedCells: true,
+    sort: false,
+    autoFilter: false,
+    pivotTables: false,
+  };
+
+  XLSX.utils.book_append_sheet(wb, ws, "Ujian Tertulis");
+  triggerDownload(wb, filename);
+}
 
 export function downloadTemplateSiswaExcel(filename = "Template-Upload-Siswa.xlsx") {
   const wb = XLSX.utils.book_new();
@@ -1292,4 +1496,288 @@ export async function importNilaiUjianKelasFromExcel(
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array", cellDates: true });
   return parseNilaiUjianKelasFromWorkbook(wb);
+}
+
+/**
+ * Download template praktek individual (tanpa daftar siswa)
+ * Template kosong untuk input nilai praktek satu siswa
+ */
+export function downloadTemplatePraktekExcel(
+  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  filename = "Template-Praktek.xlsx",
+) {
+  const wb = XLSX.utils.book_new();
+
+  const headerTop: (string | number)[] = ["No", "Mata Pelajaran", "Nilai"];
+  const rows: (string | number)[][] = [headerTop];
+
+  let rowNum = 1;
+  for (const s of SUBJECTS) {
+    rows.push([rowNum, displaySubjectTemplate(s), ""]);
+    rowNum++;
+  }
+  for (const m of selectedMulok) {
+    rows.push([rowNum, displayMulokTemplate(m), ""]);
+    rowNum++;
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const ensureCell = (r: number, c: number) => {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    let cell = ws[addr] as XLSX.CellObject | undefined;
+    if (!cell) {
+      cell = { t: "s", v: "" } as XLSX.CellObject;
+      ws[addr] = cell;
+    }
+    return cell;
+  };
+  const setStyle = (r: number, c: number, style: any) => {
+    const cell = ensureCell(r, c);
+    cell.s = style;
+  };
+
+  ws["!cols"] = [{ wch: 6 }, { wch: 30 }, { wch: 12 }];
+  ws["!freeze"] = { xSplit: 2, ySplit: 1 };
+
+  const headerStyle = {
+    font: { bold: true, name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    fill: { fgColor: { rgb: "CCCCCC" } },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: true },
+  };
+  const dataStyle = {
+    font: { name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: false },
+    numFmt: "0",
+  };
+
+  for (let c = 0; c < 3; c++) {
+    setStyle(0, c, headerStyle);
+  }
+
+  for (let r = 1; r < rows.length; r++) {
+    setStyle(r, 0, dataStyle);
+    setStyle(r, 1, { ...dataStyle, protection: { locked: true } });
+    setStyle(r, 2, dataStyle);
+  }
+
+  ws["!protect"] = {
+    sheet: true,
+    content: true,
+    objects: false,
+    scenarios: false,
+    formatCells: false,
+    formatColumns: false,
+    formatRows: false,
+    insertColumns: false,
+    insertRows: false,
+    insertHyperlinks: false,
+    deleteColumns: false,
+    deleteRows: false,
+    selectLockedCells: false,
+    selectUnlockedCells: true,
+    sort: false,
+    autoFilter: false,
+    pivotTables: false,
+  };
+
+  XLSX.utils.book_append_sheet(wb, ws, "Praktek");
+  triggerDownload(wb, filename);
+}
+
+/**
+ * Download template kurmer individual (tanpa daftar siswa)
+ * Template kosong untuk input nilai kurmer satu siswa
+ */
+export function downloadTemplateKurmerExcel(
+  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  filename = "Template-Kurmer.xlsx",
+) {
+  const wb = XLSX.utils.book_new();
+
+  const headerTop: (string | number)[] = ["No", "Mata Pelajaran", "K5-S1", "K5-S2", "K6-S1", "K6-S2"];
+  const rows: (string | number)[][] = [headerTop];
+
+  let rowNum = 1;
+  for (const s of SUBJECTS) {
+    rows.push([rowNum, displaySubjectTemplate(s), "", "", "", ""]);
+    rowNum++;
+  }
+  for (const m of selectedMulok) {
+    rows.push([rowNum, displayMulokTemplate(m), "", "", "", ""]);
+    rowNum++;
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const ensureCell = (r: number, c: number) => {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    let cell = ws[addr] as XLSX.CellObject | undefined;
+    if (!cell) {
+      cell = { t: "s", v: "" } as XLSX.CellObject;
+      ws[addr] = cell;
+    }
+    return cell;
+  };
+  const setStyle = (r: number, c: number, style: any) => {
+    const cell = ensureCell(r, c);
+    cell.s = style;
+  };
+
+  ws["!cols"] = [{ wch: 6 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+  ws["!freeze"] = { xSplit: 2, ySplit: 1 };
+
+  const headerStyle = {
+    font: { bold: true, name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    fill: { fgColor: { rgb: "CCCCCC" } },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: true },
+  };
+  const dataStyle = {
+    font: { name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "111827" } },
+      bottom: { style: "thin", color: { rgb: "111827" } },
+      left: { style: "thin", color: { rgb: "111827" } },
+      right: { style: "thin", color: { rgb: "111827" } },
+    },
+    protection: { locked: false },
+    numFmt: "0",
+  };
+
+  for (let c = 0; c < 6; c++) {
+    setStyle(0, c, headerStyle);
+  }
+
+  for (let r = 1; r < rows.length; r++) {
+    setStyle(r, 0, dataStyle);
+    setStyle(r, 1, { ...dataStyle, protection: { locked: true } });
+    setStyle(r, 2, dataStyle);
+    setStyle(r, 3, dataStyle);
+    setStyle(r, 4, dataStyle);
+    setStyle(r, 5, dataStyle);
+  }
+
+  ws["!protect"] = {
+    sheet: true,
+    content: true,
+    objects: false,
+    scenarios: false,
+    formatCells: false,
+    formatColumns: false,
+    formatRows: false,
+    insertColumns: false,
+    insertRows: false,
+    insertHyperlinks: false,
+    deleteColumns: false,
+    deleteRows: false,
+    selectLockedCells: false,
+    selectUnlockedCells: true,
+    sort: false,
+    autoFilter: false,
+    pivotTables: false,
+  };
+
+  XLSX.utils.book_append_sheet(wb, ws, "Kurmer");
+  triggerDownload(wb, filename);
+}
+
+/**
+ * Download template lengkap dengan multiple sheets (Identitas, Kurmer, Praktek, Ujian)
+ */
+export function downloadTemplateExcel(filename = "Template-Rekap-Nilai-Lengkap.xlsx") {
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Identitas
+  const identitasRows: (string | number)[][] = [
+    ["No", "Nama Lengkap", "NISN", "No Ujian", "Jenis Kelamin (L/P)", "Tempat Lahir", "Tanggal Lahir (YYYY-MM-DD)", "Nama Ayah", "Nama Ibu"],
+  ];
+  for (let i = 1; i <= 50; i++) {
+    identitasRows.push([i, "", "", "", "", "", "", "", ""]);
+  }
+  const identitasWs = XLSX.utils.aoa_to_sheet(identitasRows);
+  identitasWs["!cols"] = [
+    { wch: 5 },
+    { wch: 30 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 20 },
+  ];
+  XLSX.utils.book_append_sheet(wb, identitasWs, "Identitas");
+
+  // Sheet 2: Kurmer
+  const kurmerHeaderTop: (string | number)[] = ["No", "NISN", "Nama"];
+  for (const s of SUBJECTS) {
+    kurmerHeaderTop.push(displaySubjectTemplate(s));
+  }
+  const kurmerRows: (string | number)[][] = [kurmerHeaderTop];
+  for (let i = 1; i <= 50; i++) {
+    const row: (string | number)[] = [i, "", ""];
+    for (let j = 0; j < SUBJECTS.length; j++) {
+      row.push("");
+    }
+    kurmerRows.push(row);
+  }
+  const kurmerWs = XLSX.utils.aoa_to_sheet(kurmerRows);
+  kurmerWs["!freeze"] = { xSplit: 3, ySplit: 1 };
+  XLSX.utils.book_append_sheet(wb, kurmerWs, "Kurmer");
+
+  // Sheet 3: Praktek
+  const praktekHeaderTop: (string | number)[] = ["No", "NISN", "Nama"];
+  for (const s of SUBJECTS) {
+    praktekHeaderTop.push(displaySubjectTemplate(s));
+  }
+  const praktekRows: (string | number)[][] = [praktekHeaderTop];
+  for (let i = 1; i <= 50; i++) {
+    const row: (string | number)[] = [i, "", ""];
+    for (let j = 0; j < SUBJECTS.length; j++) {
+      row.push("");
+    }
+    praktekRows.push(row);
+  }
+  const praktekWs = XLSX.utils.aoa_to_sheet(praktekRows);
+  praktekWs["!freeze"] = { xSplit: 3, ySplit: 1 };
+  XLSX.utils.book_append_sheet(wb, praktekWs, "Praktek");
+
+  // Sheet 4: Ujian Tertulis
+  const ujianHeaderTop: (string | number)[] = ["No", "NISN", "Nama"];
+  for (const s of SUBJECTS) {
+    ujianHeaderTop.push(displaySubjectTemplate(s));
+  }
+  const ujianRows: (string | number)[][] = [ujianHeaderTop];
+  for (let i = 1; i <= 50; i++) {
+    const row: (string | number)[] = [i, "", ""];
+    for (let j = 0; j < SUBJECTS.length; j++) {
+      row.push("");
+    }
+    ujianRows.push(row);
+  }
+  const ujianWs = XLSX.utils.aoa_to_sheet(ujianRows);
+  ujianWs["!freeze"] = { xSplit: 3, ySplit: 1 };
+  XLSX.utils.book_append_sheet(wb, ujianWs, "Ujian Tertulis");
+
+  triggerDownload(wb, filename);
 }
