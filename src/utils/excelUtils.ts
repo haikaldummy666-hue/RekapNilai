@@ -1209,6 +1209,7 @@ export function downloadTemplateNilaiUjianKelasExcel(
   const unlockedStyle = {
     font: { name: "Calibri", sz: 11 },
     alignment: { vertical: "center", horizontal: "center" },
+    fill: { patternType: "solid", fgColor: { rgb: "FEE2E2" } },
     border: {
       top: { style: "thin", color: { rgb: "111827" } },
       bottom: { style: "thin", color: { rgb: "111827" } },
@@ -1237,7 +1238,7 @@ export function downloadTemplateNilaiUjianKelasExcel(
   }
 
   // Removed cell comment pop-ups and data validation per user request.
-  // Template will be protected so cells are not selectable/editable in Excel.
+  // Template will be protected, but nilai dapat diedit di sel yang terbuka.
 
   ws["!protect"] = {
     sheet: true,
@@ -1252,9 +1253,8 @@ export function downloadTemplateNilaiUjianKelasExcel(
     insertHyperlinks: false,
     deleteColumns: false,
     deleteRows: false,
-    // Prevent selecting locked and unlocked cells so sheet is not clickable/editable
     selectLockedCells: false,
-    selectUnlockedCells: false,
+    selectUnlockedCells: true,
     sort: false,
     autoFilter: false,
     pivotTables: false,
