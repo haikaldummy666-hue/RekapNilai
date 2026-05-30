@@ -250,6 +250,21 @@ function buildUjianTertulisKelasTemplateSheet(
 }
 
 /**
+ * Download template ujian tertulis kelas dengan daftar siswa
+ * Hanya kolom nilai yang bisa di-edit, sheet dikunci
+ */
+export function downloadTemplateUjianTertulisKelasExcel(
+  students: Array<{ nama: string; [key: string]: any }>,
+  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  filename = "Template-Ujian-Tertulis-Kelas.xlsx",
+) {
+  const wb = XLSX.utils.book_new();
+  const ws = buildUjianTertulisKelasTemplateSheet(students, selectedMulok);
+  XLSX.utils.book_append_sheet(wb, ws, "Ujian Tertulis");
+  triggerDownload(wb, filename);
+}
+
+/**
  * Import hasil nilai ujian dari template kelas yang sudah terisi
  * Mengembalikan pemetaan NISN -> nilai ujian tertulis
  */
