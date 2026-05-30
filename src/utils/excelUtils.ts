@@ -1047,34 +1047,8 @@ export function downloadTemplateNilaiUjianKelasExcel(
     }
   }
 
-  const hintText = "Klik sel nilai dan isi dengan angka 0 sampai 100.";
-  const comment = { a: "Rekap Nilai MI", t: hintText };
-  for (let c = 4; c <= lastCol; c++) {
-    const cell = ensureCell(ws, 1, c);
-    cell.c = [comment];
-  }
-
-  const dataRange = XLSX.utils.encode_range({
-    s: { r: headerRows, c: 4 },
-    e: { r: headerRows + minRows - 1, c: lastCol },
-  });
-  ws["!dataValidation"] = [
-    {
-      sqref: dataRange,
-      type: "whole",
-      operator: "between",
-      formula1: "0",
-      formula2: "100",
-      allowBlank: true,
-      showInputMessage: true,
-      promptTitle: "Nilai Ujian",
-      prompt: "Isi dengan angka 0 sampai 100.",
-      showErrorMessage: true,
-      errorTitle: "Nilai tidak valid",
-      error: "Hanya angka 0 sampai 100 yang diperbolehkan.",
-      errorStyle: "stop",
-    },
-  ];
+  // Removed cell comment pop-ups and data validation per user request.
+  // Template will be protected so cells are not selectable/editable in Excel.
 
   ws["!protect"] = {
     sheet: true,
@@ -1089,11 +1063,12 @@ export function downloadTemplateNilaiUjianKelasExcel(
     insertHyperlinks: false,
     deleteColumns: false,
     deleteRows: false,
-    selectLockedCells: true,
+    // Prevent selecting locked and unlocked cells so sheet is not clickable/editable
+    selectLockedCells: false,
+    selectUnlockedCells: false,
     sort: false,
     autoFilter: false,
     pivotTables: false,
-    selectUnlockedCells: true,
   };
 
   XLSX.utils.book_append_sheet(wb, ws, "Nilai Ujian");
