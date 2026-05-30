@@ -1686,25 +1686,8 @@ export function downloadTemplateKurmerExcel(
     setStyle(r, 5, dataStyle);
   }
 
-  ws["!protect"] = {
-    sheet: true,
-    content: true,
-    objects: false,
-    scenarios: false,
-    formatCells: false,
-    formatColumns: false,
-    formatRows: false,
-    insertColumns: false,
-    insertRows: false,
-    insertHyperlinks: false,
-    deleteColumns: false,
-    deleteRows: false,
-    selectLockedCells: false,
-    selectUnlockedCells: true,
-    sort: false,
-    autoFilter: false,
-    pivotTables: false,
-  };
+  // No sheet protection for the Kurmer template so users can input values directly
+  // without Excel blocking the file. Locked styling is preserved for visual guidance.
 
   XLSX.utils.book_append_sheet(wb, ws, "Kurmer");
   triggerDownload(wb, filename);

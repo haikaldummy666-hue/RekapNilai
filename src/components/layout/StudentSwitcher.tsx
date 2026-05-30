@@ -119,6 +119,7 @@ export function StudentSwitcher({
           <div className="flex flex-wrap items-center gap-2">
             {templateDownload && (
               <Button
+                type="button"
                 variant="outline"
                 onClick={templateDownload.onClick}
                 aria-label={templateDownload.label}
