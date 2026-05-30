@@ -336,7 +336,7 @@ function ExcelToolsPage() {
               <Button
                 className="bg-gradient-primary text-primary-foreground"
                 onClick={() => {
-                  downloadTemplateNilaiUjianKelasExcel(students, undefined, "mi-2026", mulokList);
+                  downloadTemplateNilaiUjianKelasExcel(students, undefined, mulokList);
                   toast.success("Template nilai ujian diunduh");
                 }}
               >

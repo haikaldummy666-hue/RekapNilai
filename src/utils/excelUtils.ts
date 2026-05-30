@@ -902,7 +902,6 @@ function clampNilaiOrNull(v: unknown): number | null {
 export function downloadTemplateNilaiUjianKelasExcel(
   students: Student[],
   filename = "Template-Nilai-Ujian-Kelas.xlsx",
-  sheetPassword = "mi-2026",
   mulokList: AvailableMulok[] = ["Bahasa Sunda"],
 ) {
   const wb = XLSX.utils.book_new();
@@ -913,7 +912,7 @@ export function downloadTemplateNilaiUjianKelasExcel(
     ["Kolom yang boleh diedit:", "Semua kolom nilai (V-1/V-2)."],
     ["Kolom yang dikunci:", "No, NISN, Nama Lengkap, JK."],
     ["Aturan nilai:", "Angka 0–100 (hanya angka)."],
-    ["Catatan:", "Proteksi adalah proteksi sheet (bukan password untuk membuka file)."],
+    ["Catatan:", "Proteksi hanya mencegah perubahan kolom identitas; nilai tetap bisa diisi langsung tanpa password."],
   ]);
   instruksi["!cols"] = [{ wch: 24 }, { wch: 72 }];
   XLSX.utils.book_append_sheet(wb, instruksi, "Instruksi");
@@ -1055,9 +1054,25 @@ export function downloadTemplateNilaiUjianKelasExcel(
     }
   }
 
-  const wsMeta = ws as unknown as Record<string, unknown>;
-  wsMeta["protect"] = { password: sheetPassword };
-  wsMeta["!protect"] = { password: sheetPassword };
+  ws["!protect"] = {
+    sheet: true,
+    content: true,
+    objects: false,
+    scenarios: false,
+    formatCells: false,
+    formatColumns: false,
+    formatRows: false,
+    insertColumns: false,
+    insertRows: false,
+    insertHyperlinks: false,
+    deleteColumns: false,
+    deleteRows: false,
+    selectLockedCells: true,
+    sort: false,
+    autoFilter: false,
+    pivotTables: false,
+    selectUnlockedCells: true,
+  };
 
   XLSX.utils.book_append_sheet(wb, ws, "Nilai Ujian");
   const writeOptions: XLSX.WritingOptions & { cellStyles?: boolean } = {
