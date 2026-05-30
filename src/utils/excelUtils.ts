@@ -204,37 +204,31 @@ function buildUjianTertulisKelasTemplateSheet(
 
   const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
 
-  // Default all cells to unlocked, then lock the identity columns and headers.
-  for (let r = range.s.r; r <= range.e.r; r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = ensureCell(ws, r, c);
-      if (!cell.s) cell.s = {};
-      (cell.s as any).protection = { locked: false };
-    }
-  }
-
-  // Lock header rows completely.
+  // Lock header rows (rows 0-1) - all columns
   for (let r = 0; r <= 1; r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
+    for (let c = 0; c <= range.e.c; c++) {
       const cell = ensureCell(ws, r, c);
       if (!cell.s) cell.s = {};
-      (cell.s as any).protection = { locked: true };
+      (cell.s as any).locked = true;
     }
   }
 
-  // Lock identity columns (No, Nama Siswa) for all data rows.
+  // Lock identity columns (A=0, B=1, C=2, D=3) for data rows (starting from row 2)
   for (let r = 2; r <= range.e.r; r++) {
     for (let c = 0; c <= 3; c++) {
       const cell = ensureCell(ws, r, c);
       if (!cell.s) cell.s = {};
-      (cell.s as any).protection = { locked: true };
+      (cell.s as any).locked = true;
     }
   }
 
-  // Set number format for editable nilai cells.
+  // Set number format for nilai cells - do NOT lock these cells
+  // Cells without locked property are editable when sheet is protected
   for (let r = 2; r <= range.e.r; r++) {
     for (let c = 4; c < 4 + allSubjects.length; c++) {
       const cell = ensureCell(ws, r, c);
+      // Allow editing - do not set locked property
+      if (!cell.s) cell.s = {};
       cell.z = "0";
     }
   }
