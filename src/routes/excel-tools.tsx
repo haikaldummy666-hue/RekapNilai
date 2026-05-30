@@ -210,7 +210,7 @@ function ExcelToolsPage() {
       updates.map((u) => ({ id: u.id, ujianTertulis: u.ujianTertulis, praktek: u.praktek })),
     );
     toast.success(`Import selesai (${result.updated} siswa diperbarui)`);
-    if (result.skipped > 0) toast.message(`${result.skipped} siswa tidak berubah`);
+    if (result.skipped > 0) toast.warning(`${result.skipped} siswa tidak berubah`);
     if (notFound > 0) toast.warning(`${notFound} baris NISN tidak ditemukan, dilewati`);
     setNilaiKelasPreview(null);
   };
