@@ -18,6 +18,8 @@ import {
   importNilaiUjianKelasFromExcel,
   importStudentListFromExcel,
   type NilaiUjianKelasParseResult,
+  downloadTemplatePraktekExcel,
+  downloadTemplateKurmerExcel,
 } from "@/utils/excelUtils";
 import {
   Table,
@@ -428,26 +430,15 @@ function ExcelToolsPage() {
           desc="Template .xlsx untuk input nilai Ujian Tertulis & Praktek semua siswa (berdasarkan NISN). Mata pelajaran lokal (Mulok) otomatis ikut serta dan bisa disesuaikan lewat 'Kelola Mulok'."
           action={
             <div className="flex gap-2">
-              <div className="flex items-center gap-2">
-                <Button
-                  className="bg-gradient-primary text-primary-foreground"
-                  onClick={() => {
-                    downloadTemplateNilaiUjianKelasExcel(students, undefined, mulokList);
-                    toast.success("Template nilai ujian (editable) diunduh");
-                  }}
-                >
-                  <Download className="mr-2 h-4 w-4" /> Unduh Template (Editable)
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    downloadTemplateNilaiUjianKelasLocked(students, undefined, mulokList);
-                    toast.success("Template nilai ujian (terkunci) diunduh");
-                  }}
-                >
-                  Unduh (Terkunci)
-                </Button>
-              </div>
+              <Button
+                className="bg-gradient-primary text-primary-foreground"
+                onClick={() => {
+                  downloadTemplateNilaiUjianKelasExcel(students, undefined, mulokList);
+                  toast.success("Template nilai ujian diunduh");
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" /> Unduh Template
+              </Button>
               <MulokManager />
             </div>
           }
