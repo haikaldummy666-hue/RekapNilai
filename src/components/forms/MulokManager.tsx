@@ -3,6 +3,13 @@ import { Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -112,17 +119,20 @@ export function MulokManager({ inline = false }: MulokManagerProps) {
   }
 
   return (
-    <>
+    <Dialog open={open} onOpenChange={setOpen}>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         <Plus className="mr-2 h-4 w-4" />
         Kelola Mulok
       </Button>
-      {open && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/80"
-          onClick={() => setOpen(false)}
-        />
-      )}
-    </>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Kelola Mata Pelajaran Lokal (Mulok)</DialogTitle>
+          <DialogDescription>
+            Tambah atau hapus mata pelajaran lokal yang ingin digunakan
+          </DialogDescription>
+        </DialogHeader>
+        <MulokManagerForm />
+      </DialogContent>
+    </Dialog>
   );
 }

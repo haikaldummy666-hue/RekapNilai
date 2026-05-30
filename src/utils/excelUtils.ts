@@ -1094,8 +1094,8 @@ function clampNilaiOrNull(v: unknown): number | null {
 
 export function downloadTemplateNilaiUjianKelasExcel(
   students: Student[],
-  filename = "Template-Nilai-Ujian-Kelas.xlsx",
   mulokList: AvailableMulok[] = ["Bahasa Sunda"],
+  filename = "Template-Nilai-Ujian-Kelas.xlsx",
 ) {
   const wb = XLSX.utils.book_new();
 
