@@ -40,6 +40,8 @@ function ExcelToolsPage() {
   const updateIdentitas = useStudentStore((s) => s.updateIdentitas);
   const addStudentsBulk = useStudentStore((s) => s.addStudentsBulk);
   const applyUjianKelasBulk = useStudentStore((s) => s.applyUjianKelasBulk);
+  const updateUjianMulok = useStudentStore((s) => s.updateUjianMulok);
+  const updatePraktekMulok = useStudentStore((s) => s.updatePraktekMulok);
   const exportSnapshot = useStudentStore((s) => s.exportSnapshot);
   const importSnapshot = useStudentStore((s) => s.importSnapshot);
   const mulokList = useMulokStore((s) => s.config.selected);
@@ -132,6 +134,76 @@ function ExcelToolsPage() {
     return m;
   }, [students]);
 
+  const processNilaiKelasRows = (parsed: NilaiUjianKelasParseResult) => {
+    const rows = parsed.rows;
+    const invalid = rows.filter((r) => r.errors.length > 0);
+    if (invalid.length > 0) {
+      setNilaiKelasPreview(parsed);
+      toast.error(`Terdapat ${invalid.length} baris invalid. Periksa preview.`);
+      return;
+    }
+
+    const updates: Array<{
+      id: string;
+      ujianTertulis: Partial<Record<Subject, number>>;
+      praktek: Partial<Record<Subject, number>>;
+    }> = [];
+    const mulokUpdates: Array<{
+      id: string;
+      ujianMulok: Partial<Record<string, number>>;
+      praktekMulok: Partial<Record<string, number>>;
+    }> = [];
+    let notFound = 0;
+    for (const r of rows) {
+      const id = nisnToId.get(r.nisn);
+      if (!id) {
+        notFound++;
+        continue;
+      }
+      const ujianTertulis: Partial<Record<Subject, number>> = {};
+      const praktek: Partial<Record<Subject, number>> = {};
+      for (const subject of Object.keys(r.values) as Subject[]) {
+        const v = r.values[subject];
+        if (v?.tertulis !== undefined) ujianTertulis[subject] = v.tertulis;
+        if (v?.praktek !== undefined) praktek[subject] = v.praktek;
+      }
+
+      const ujianMulok: Partial<Record<string, number>> = {};
+      const praktekMulok: Partial<Record<string, number>> = {};
+      for (const [mulok, v] of Object.entries(r.mulokValues)) {
+        if (v?.tertulis !== undefined) ujianMulok[mulok] = v.tertulis;
+        if (v?.praktek !== undefined) praktekMulok[mulok] = v.praktek;
+      }
+
+      updates.push({ id, ujianTertulis, praktek });
+      mulokUpdates.push({ id, ujianMulok, praktekMulok });
+    }
+
+    if (updates.length === 0) {
+      toast.error("Tidak ada siswa yang cocok (berdasarkan NISN). Nilai tidak diterapkan.");
+      setNilaiKelasPreview(parsed);
+      return;
+    }
+
+    const result = applyUjianKelasBulk(
+      updates.map((u) => ({ id: u.id, ujianTertulis: u.ujianTertulis, praktek: u.praktek })),
+    );
+    for (const mulokUpdate of mulokUpdates) {
+      const { id, ujianMulok, praktekMulok } = mulokUpdate;
+      for (const [mulok, value] of Object.entries(ujianMulok)) {
+        updateUjianMulok(id, mulok as any, value!);
+      }
+      for (const [mulok, value] of Object.entries(praktekMulok)) {
+        updatePraktekMulok(id, mulok as any, value!);
+      }
+    }
+
+    toast.success(`Import selesai (${result.updated} siswa diperbarui)`);
+    if (result.skipped > 0) toast.warning(`${result.skipped} siswa tidak berubah`);
+    if (notFound > 0) toast.warning(`${notFound} baris NISN tidak ditemukan, dilewati`);
+    setNilaiKelasPreview(null);
+  };
+
   const onImportNilaiKelas = async (file: File) => {
     const name = file.name.toLowerCase();
     if (!name.endsWith(".xlsx")) {
@@ -151,8 +223,7 @@ function ExcelToolsPage() {
         setNilaiKelasPreview(parsed);
         return;
       }
-      setNilaiKelasPreview(parsed);
-      toast.success("Preview import siap. Periksa lalu terapkan.");
+      processNilaiKelasRows(parsed);
     } catch (e) {
       console.error(e);
       toast.error(e instanceof Error ? e.message : "Gagal membaca file Excel");
@@ -177,6 +248,11 @@ function ExcelToolsPage() {
       ujianTertulis: Partial<Record<Subject, number>>;
       praktek: Partial<Record<Subject, number>>;
     }> = [];
+    const mulokUpdates: Array<{
+      id: string;
+      ujianMulok: Partial<Record<string, number>>;
+      praktekMulok: Partial<Record<string, number>>;
+    }> = [];
     let notFound = 0;
     for (const r of rows) {
       const id = nisnToId.get(r.nisn);
@@ -191,7 +267,16 @@ function ExcelToolsPage() {
         if (v?.tertulis !== undefined) ujianTertulis[subject] = v.tertulis;
         if (v?.praktek !== undefined) praktek[subject] = v.praktek;
       }
+
+      const ujianMulok: Partial<Record<string, number>> = {};
+      const praktekMulok: Partial<Record<string, number>> = {};
+      for (const [mulok, v] of Object.entries(r.mulokValues)) {
+        if (v?.tertulis !== undefined) ujianMulok[mulok] = v.tertulis;
+        if (v?.praktek !== undefined) praktekMulok[mulok] = v.praktek;
+      }
+
       updates.push({ id, ujianTertulis, praktek });
+      mulokUpdates.push({ id, ujianMulok, praktekMulok });
     }
 
     if (updates.length === 0) {
@@ -209,6 +294,16 @@ function ExcelToolsPage() {
     const result = applyUjianKelasBulk(
       updates.map((u) => ({ id: u.id, ujianTertulis: u.ujianTertulis, praktek: u.praktek })),
     );
+    for (const mulokUpdate of mulokUpdates) {
+      const { id, ujianMulok, praktekMulok } = mulokUpdate;
+      for (const [mulok, value] of Object.entries(ujianMulok)) {
+        updateUjianMulok(id, mulok as any, value!);
+      }
+      for (const [mulok, value] of Object.entries(praktekMulok)) {
+        updatePraktekMulok(id, mulok as any, value!);
+      }
+    }
+
     toast.success(`Import selesai (${result.updated} siswa diperbarui)`);
     if (result.skipped > 0) toast.warning(`${result.skipped} siswa tidak berubah`);
     if (notFound > 0) toast.warning(`${notFound} baris NISN tidak ditemukan, dilewati`);

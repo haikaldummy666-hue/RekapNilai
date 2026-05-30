@@ -204,17 +204,15 @@ function buildUjianTertulisKelasTemplateSheet(
 
   const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
 
-  // Lock header rows (rows 0-1) - all columns
-  for (let r = 0; r <= 1; r++) {
-    for (let c = 0; c <= range.e.c; c++) {
-      const cell = ensureCell(ws, r, c);
-      if (!cell.s) cell.s = {};
-      (cell.s as any).locked = true;
-    }
+  // Lock header row (row 0) - all columns
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = ensureCell(ws, 0, c);
+    if (!cell.s) cell.s = {};
+    (cell.s as any).locked = true;
   }
 
-  // Lock identity columns (A=0, B=1, C=2, D=3) for data rows (starting from row 2)
-  for (let r = 2; r <= range.e.r; r++) {
+  // Lock identity columns (A=0,B=1,C=2,D=3) for data rows
+  for (let r = 1; r <= range.e.r; r++) {
     for (let c = 0; c <= 3; c++) {
       const cell = ensureCell(ws, r, c);
       if (!cell.s) cell.s = {};
@@ -222,13 +220,12 @@ function buildUjianTertulisKelasTemplateSheet(
     }
   }
 
-  // Set number format for nilai cells - do NOT lock these cells
-  // Cells without locked property are editable when sheet is protected
-  for (let r = 2; r <= range.e.r; r++) {
+  // Set number format for nilai cells and leave them unlocked
+  for (let r = 1; r <= range.e.r; r++) {
     for (let c = 4; c < 4 + allSubjects.length; c++) {
       const cell = ensureCell(ws, r, c);
-      // Allow editing - do not set locked property
       if (!cell.s) cell.s = {};
+      delete (cell.s as any).locked;
       cell.z = "0";
     }
   }
@@ -913,17 +910,6 @@ export function downloadTemplateNilaiUjianKelasExcel(
 ) {
   const wb = XLSX.utils.book_new();
 
-  const instruksi = XLSX.utils.aoa_to_sheet([
-    ["TEMPLATE NILAI UJIAN (KELAS)"],
-    [],
-    ["Kolom yang boleh diedit:", "Semua kolom nilai (V-1/V-2)."],
-    ["Kolom yang dikunci:", "No, NISN, Nama Lengkap, JK."],
-    ["Aturan nilai:", "Angka 0–100 (hanya angka)."],
-    ["Catatan:", "Proteksi hanya mencegah perubahan kolom identitas; nilai tetap bisa diisi langsung tanpa password."],
-  ]);
-  instruksi["!cols"] = [{ wch: 24 }, { wch: 72 }];
-  XLSX.utils.book_append_sheet(wb, instruksi, "Instruksi");
-
   const headerTop: (string | number)[] = ["No", "NISN", "Nama Lengkap", "JK"];
   const headerSub: (string | number)[] = ["", "", "", ""];
   
@@ -1060,6 +1046,35 @@ export function downloadTemplateNilaiUjianKelasExcel(
       }
     }
   }
+
+  const hintText = "Klik sel nilai dan isi dengan angka 0 sampai 100.";
+  const comment = { a: "Rekap Nilai MI", t: hintText };
+  for (let c = 4; c <= lastCol; c++) {
+    const cell = ensureCell(ws, 1, c);
+    cell.c = [comment];
+  }
+
+  const dataRange = XLSX.utils.encode_range({
+    s: { r: headerRows, c: 4 },
+    e: { r: headerRows + minRows - 1, c: lastCol },
+  });
+  ws["!dataValidation"] = [
+    {
+      sqref: dataRange,
+      type: "whole",
+      operator: "between",
+      formula1: "0",
+      formula2: "100",
+      allowBlank: true,
+      showInputMessage: true,
+      promptTitle: "Nilai Ujian",
+      prompt: "Isi dengan angka 0 sampai 100.",
+      showErrorMessage: true,
+      errorTitle: "Nilai tidak valid",
+      error: "Hanya angka 0 sampai 100 yang diperbolehkan.",
+      errorStyle: "stop",
+    },
+  ];
 
   ws["!protect"] = {
     sheet: true,
