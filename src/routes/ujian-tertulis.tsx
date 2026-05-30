@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, Save, Trash2 } from "lucide-react";
+import { LoaderCircle, Save, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
 import { StudentSwitcher } from "@/components/layout/StudentSwitcher";
@@ -19,7 +19,24 @@ import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
 import { useAppStateStore } from "@/stores/appStateStore";
 import { formatNilai } from "@/utils/formatUtils";
-import { downloadTemplateUjianTertulisExcel } from "@/utils/excelUtils";
+import { downloadTemplateUjianTertulisExcel, downloadTemplateUjianTertulisKelasExcel } from "@/utils/excelUtils";
+import { useMulokStore } from "@/stores/mulokStore";
+import { MulokManager } from "@/components/forms/MulokManager";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/ujian-tertulis")({
   head: () => ({ meta: [{ title: "Ujian Tertulis — Rekap Nilai MI" }] }),
@@ -43,16 +60,20 @@ function isEqual(a: TertulisDraft, b: TertulisDraft): boolean {
 
 function UjianTertulisPage() {
   const active = useActiveStudent();
+  const students = useStudentStore((s) => s.students);
   const setNilai = useStudentStore((s) => s.setNilai);
   const getDraft = useAppStateStore((s) => s.state.routes["/ujian-tertulis"]?.drafts);
   const setRouteDraft = useAppStateStore((s) => s.setRouteDraft);
   const removeRouteDraft = useAppStateStore((s) => s.removeRouteDraft);
+  const mulokConfig = useMulokStore((s) => s.config);
 
   const baselineRef = useRef<TertulisDraft | null>(null);
   const draftRef = useRef<TertulisDraft | null>(null);
   const draftOwnerRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<TertulisDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [selectedKelas, setSelectedKelas] = useState<string>("all");
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!active) {
@@ -154,6 +175,32 @@ function UjianTertulisPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isDirty, requestSave, saving]);
 
+  // Get kelas list
+  const kelasList = useMemo(() => {
+    const set = new Set<string>();
+    students.forEach((s) => {
+      const k = s.identitas.kelas?.trim();
+      if (k) set.add(k);
+    });
+    return Array.from(set).sort();
+  }, [students]);
+
+  // Get students for selected kelas
+  const siswaByKelas = useMemo(() => {
+    if (selectedKelas === "all") return students;
+    return students.filter((s) => (s.identitas.kelas?.trim() || "") === selectedKelas);
+  }, [students, selectedKelas]);
+
+  const handleDownloadTemplateKelas = () => {
+    if (siswaByKelas.length === 0) {
+      toast.error("Tidak ada siswa di kelas ini");
+      return;
+    }
+    downloadTemplateUjianTertulisKelasExcel(siswaByKelas, mulokConfig.selected);
+    toast.success("Template Ujian Tertulis (Kelas) diunduh");
+    setTemplateDialogOpen(false);
+  };
+
   return (
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader title="Ujian Tertulis" description="Input nilai ujian tertulis per mata pelajaran." />
@@ -162,20 +209,106 @@ function UjianTertulisPage() {
       ) : (
         <PageCard
           actions={
-            <div className="flex items-end gap-2">
+            <div className="flex flex-wrap items-end gap-2">
               <StudentSwitcher
                 label="data siswa"
                 showClassFilter
                 showAdd={false}
                 showRemove={false}
-                templateDownload={{
-                  label: "Download template Ujian Tertulis",
-                  onClick: () => {
-                    downloadTemplateUjianTertulisExcel();
-                    toast.success("Template Ujian Tertulis diunduh");
-                  },
-                }}
               />
+              
+              {/* Download Template Dialog */}
+              <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Template
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>### Download Template Nilai Ujian</DialogTitle>
+                    <DialogDescription>
+                      Pilih format template yang ingin diunduh untuk input nilai ujian tertulis.
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="space-y-6">
+                    {/* Template Individual */}
+                    <div className="rounded-lg border p-4">
+                      <h3 className="mb-2 font-medium">Template Individual</h3>
+                      <p className="mb-3 text-sm text-muted-foreground">
+                        Template untuk input nilai satu siswa per satu. Gunakan untuk merekam nilai siswa satu per satu.
+                      </p>
+                      <Button
+                        onClick={() => {
+                          downloadTemplateUjianTertulisExcel();
+                          toast.success("Template Individual diunduh");
+                          setTemplateDialogOpen(false);
+                        }}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download Template Individual
+                      </Button>
+                    </div>
+
+                    {/* Template Kelas */}
+                    <div className="rounded-lg border p-4">
+                      <h3 className="mb-2 font-medium">Template Nilai Ujian (Kelas)</h3>
+                      <p className="mb-3 text-sm text-muted-foreground">
+                        Template dengan daftar siswa di kelas. Sesuaikan dengan siswa yang ada, hanya kolom nilai yang dapat diedit (angka 0-100 saja).
+                      </p>
+                      
+                      <div className="mb-3">
+                        <label className="text-sm font-medium">Pilih Kelas:</label>
+                        <Select value={selectedKelas} onValueChange={setSelectedKelas}>
+                          <SelectTrigger className="mt-2">
+                            <SelectValue placeholder="Pilih kelas…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Semua Siswa</SelectItem>
+                            {kelasList.map((k) => (
+                              <SelectItem key={k} value={k}>
+                                {k}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="mb-3 rounded bg-muted/50 p-2 text-xs text-muted-foreground">
+                        <p className="font-medium">Informasi:</p>
+                        <ul className="mt-1 list-inside list-disc space-y-1">
+                          <li>Siswa di kelas: <strong>{siswaByKelas.length}</strong></li>
+                          <li>Mata Pelajaran: {SUBJECTS.length + mulokConfig.selected.length}</li>
+                          <li>Sheet dikunci - hanya nilai yang dapat diedit</li>
+                        </ul>
+                      </div>
+
+                      <Button
+                        onClick={handleDownloadTemplateKelas}
+                        disabled={siswaByKelas.length === 0}
+                        className="w-full"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download Template Kelas
+                      </Button>
+                    </div>
+
+                    {/* Manajemen MULOK */}
+                    <div className="rounded-lg border p-4">
+                      <h3 className="mb-3 font-medium">Manajemen Mata Pelajaran Lokal</h3>
+                      <p className="mb-4 text-sm text-muted-foreground">
+                        Kelola mata pelajaran lokal yang akan ditampilkan di template Excel. Bahasa Sunda tidak bisa dihapus (wajib). Perubahan akan otomatis tercermin saat download file.
+                      </p>
+                      <MulokManager inline />
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
               <Button
                 size="icon"
                 variant="ghost"

@@ -12,6 +12,7 @@
  */
 import * as XLSX from "xlsx";
 import { SUBJECTS, type Subject } from "@/data/subjects";
+import { AVAILABLE_MULOK, type AvailableMulok } from "@/types/mulok.types";
 import type { Identitas, NilaiSiswa, Student } from "@/types/student.types";
 import { emptyNilai } from "@/data/sampleData";
 import {
@@ -164,6 +165,168 @@ export function downloadTemplateUjianTertulisExcel(filename = "Template-Ujian-Te
   XLSX.utils.book_append_sheet(wb, buildUjianTertulisTemplateSheet(), "Ujian Tertulis");
   triggerDownload(wb, filename);
 }
+
+/**
+ * Build template ujian tertulis dengan daftar siswa dan MULOK dinamis
+ * Format: Kolom pertama = No, Kolom kedua = Nama Siswa, Kolom ketiga+ = Mata Pelajaran
+ * Hanya kolom nilai yang dapat di-edit (angka saja, 0-100)
+ * Sheet dikunci untuk proteksi
+ */
+function buildUjianTertulisKelasTemplateSheet(
+  students: Array<{ nama: string; [key: string]: any }>,
+  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+): XLSX.WorkSheet {
+  // Kombinasikan subject standar + mulok yang dipilih
+  const allSubjects = [...SUBJECTS.filter((s) => s !== "Bahasa Sunda"), ...selectedMulok];
+
+  // Header: No, Nama Siswa, [Mata Pelajaran...]
+  const headerRow = ["No", "Nama Siswa", ...allSubjects];
+
+  // Data rows: isi dengan nama siswa dan kosongkan untuk nilai
+  const dataRows = students.map((student, idx) => [
+    idx + 1, // No
+    student.nama, // Nama Siswa
+    ...allSubjects.map(() => ""), // Kosong untuk nilai
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+
+  // Setup kolom width
+  const colWidths = [
+    { wch: 5 }, // No
+    { wch: 30 }, // Nama Siswa
+    ...allSubjects.map(() => ({ wch: 12 })), // Mata Pelajaran
+  ];
+  ws["!cols"] = colWidths;
+
+  // Freeze panes: kolom No dan Nama Siswa tetap terlihat
+  ws["!freeze"] = { xSplit: 2, ySplit: 1 };
+
+  // Setup sheet protection: hanya kolom nilai yang bisa di-edit
+  // Kunci semua cell terlebih dahulu
+  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ensureCell(ws, r, c);
+      // Tandai semua cell sebagai locked
+      if (!cell.s) cell.s = {};
+      (cell.s as any).locked = true;
+    }
+  }
+
+  // Buka lock untuk kolom nilai (mulai dari kolom C = index 2, row 2 ke bawah)
+  for (let r = 1; r < dataRows.length + 1; r++) {
+    for (let c = 2; c < 2 + allSubjects.length; c++) {
+      const cell = ensureCell(ws, r, c);
+      if (!cell.s) cell.s = {};
+      (cell.s as any).locked = false;
+      // Set number format untuk hanya angka
+      cell.z = "0";
+    }
+  }
+
+  // Proteksi sheet dengan password kosong (tidak bisa diubah struktur, tapi bisa edit nilai)
+  ws["!protect"] = {
+    sheet: true,
+    content: true,
+    objects: false,
+    scenarios: false,
+    formatCells: false,
+    formatColumns: false,
+    formatRows: false,
+    insertColumns: false,
+    insertRows: false,
+    insertHyperlinks: false,
+    deleteColumns: false,
+    deleteRows: false,
+    selectLockedCells: true,
+    sort: false,
+    autoFilter: false,
+    pivotTables: false,
+    selectUnlockedCells: true,
+  };
+
+  return ws;
+}
+
+/**
+ * Import hasil nilai ujian dari template kelas yang sudah terisi
+ * Mengembalikan pemetaan NISN -> nilai ujian tertulis
+ */
+export async function importUjianTertulisKelasFromExcel(
+  file: File,
+): Promise<{ results: Map<string, Record<Subject, number>>; warnings: string[] }> {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const warnings: string[] = [];
+  const results = new Map<string, Record<Subject, number>>();
+
+  const ws = wb.Sheets["Ujian Tertulis"] || wb.Sheets[wb.SheetNames[0]];
+  if (!ws) {
+    warnings.push("Sheet 'Ujian Tertulis' tidak ditemukan");
+    return { results, warnings };
+  }
+
+  const arr = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true });
+  if (arr.length < 2) {
+    warnings.push("Template terlalu pendek (minimal header + 1 baris data)");
+    return { results, warnings };
+  }
+
+  const headerRow = arr[0] as unknown[];
+  const buildHeaderIndex = (row: unknown[]): Map<string, number> => {
+    const m = new Map<string, number>();
+    row.forEach((h, idx) => {
+      const key = normalizeHeader(h);
+      if (key) m.set(key, idx);
+    });
+    return m;
+  };
+
+  const headerIndex = buildHeaderIndex(headerRow);
+  const idxNama = headerIndex.get("namasising") ?? headerIndex.get("nama");
+  
+  if (idxNama === undefined) {
+    warnings.push("Kolom 'Nama Siswa' tidak ditemukan");
+    return { results, warnings };
+  }
+
+  // Parsing data rows (mulai dari row 1)
+  for (let i = 1; i < arr.length; i++) {
+    const row = arr[i] as unknown[];
+    const nama = str(row?.[idxNama]);
+    
+    if (!nama) continue; // Skip empty rows
+
+    const nilaiBySubject: Record<Subject, number> = {} as any;
+    SUBJECTS.forEach((s) => {
+      nilaiBySubject[s] = 0;
+    });
+
+    // Parse nilai untuk setiap subject
+    for (let c = 2; c < row.length; c++) {
+      const headerVal = headerRow?.[c];
+      if (!headerVal) break;
+      
+      const headerStr = str(headerVal);
+      // Try to match subject
+      const subject = subjectFromTemplateHeader(headerStr);
+      if (subject) {
+        nilaiBySubject[subject] = clampNilaiOrNull(row[c]) ?? 0;
+      }
+    }
+
+    // Gunakan nama sebagai key (karena NISN mungkin tidak ada di template sederhana)
+    results.set(nama, nilaiBySubject);
+  }
+
+  if (results.size === 0) {
+    warnings.push("Tidak ada data nilai yang berhasil diparse");
+  }
+
+  return { results, warnings };
+}
+
 
 export function downloadTemplateSiswaExcel(filename = "Template-Upload-Siswa.xlsx") {
   const wb = XLSX.utils.book_new();
@@ -644,6 +807,7 @@ export type NilaiUjianKelasRow = {
   nisn: string;
   kelas: string;
   values: Partial<Record<Subject, { tertulis?: number; praktek?: number }>>;
+  mulokValues: Partial<Record<AvailableMulok, { tertulis?: number; praktek?: number }>>;
   errors: string[];
 };
 
@@ -672,6 +836,11 @@ function displaySubjectTemplate(s: Subject): string {
   return s;
 }
 
+function displayMulokTemplate(m: AvailableMulok): string {
+  // For now, display Mulok as-is. Can be customized later for abbreviations
+  return m;
+}
+
 function subjectFromTemplateHeader(raw: string): Subject | null {
   const key = normalizeHeader(raw);
   if (!key) return null;
@@ -685,6 +854,17 @@ function subjectFromTemplateHeader(raw: string): Subject | null {
   for (const s of SUBJECTS) {
     if (normalizeHeader(s) === key) return s;
     if (normalizeHeader(displaySubjectTemplate(s)) === key) return s;
+  }
+  return null;
+}
+
+function mulokFromTemplateHeader(raw: string): AvailableMulok | null {
+  const key = normalizeHeader(raw);
+  if (!key) return null;
+  
+  for (const m of AVAILABLE_MULOK) {
+    if (normalizeHeader(m) === key) return m;
+    if (normalizeHeader(displayMulokTemplate(m)) === key) return m;
   }
   return null;
 }
@@ -708,6 +888,7 @@ export function downloadTemplateNilaiUjianKelasExcel(
   students: Student[],
   filename = "Template-Nilai-Ujian-Kelas.xlsx",
   sheetPassword = "mi-2026",
+  mulokList: AvailableMulok[] = ["Bahasa Sunda"],
 ) {
   const wb = XLSX.utils.book_new();
 
@@ -724,8 +905,16 @@ export function downloadTemplateNilaiUjianKelasExcel(
 
   const headerTop: (string | number)[] = ["No", "NISN", "Nama Lengkap", "JK"];
   const headerSub: (string | number)[] = ["", "", "", ""];
+  
+  // Add SUBJECTS columns
   for (const s of SUBJECTS) {
     headerTop.push(displaySubjectTemplate(s), "");
+    headerSub.push("V-1", "V-2");
+  }
+  
+  // Add MULOK columns
+  for (const m of mulokList) {
+    headerTop.push(displayMulokTemplate(m), "");
     headerSub.push("V-1", "V-2");
   }
 
@@ -739,22 +928,33 @@ export function downloadTemplateNilaiUjianKelasExcel(
     const nama = s?.identitas.nama ?? "";
     const jk = s?.identitas.jenisKelamin ?? "";
     const row: (string | number)[] = [no, nisn, nama, jk];
+    
+    // Add SUBJECTS values
     for (const subj of SUBJECTS) {
       row.push(s ? s.nilai.ujianTertulis[subj] : "", s ? s.nilai.praktek[subj] : "");
     }
+    
+    // Add MULOK values
+    for (const m of mulokList) {
+      row.push(s ? s.nilai.ujianMulok[m] : "", s ? s.nilai.praktekMulok[m] : "");
+    }
+    
     rows.push(row);
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!freeze"] = { xSplit: 4, ySplit: 2 };
+  
+  const colCount = SUBJECTS.length + mulokList.length;
   ws["!cols"] = [
     { wch: 4 },
     { wch: 16 },
     { wch: 30 },
     { wch: 6 },
-    ...Array.from({ length: SUBJECTS.length * 2 }).map(() => ({ wch: 6 })),
+    ...Array.from({ length: colCount * 2 }).map(() => ({ wch: 6 })),
   ];
-  ws["!merges"] = [
+  
+  const merges: XLSX.Range[] = [
     { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
     { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
     { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
@@ -763,7 +963,12 @@ export function downloadTemplateNilaiUjianKelasExcel(
       const start = 4 + idx * 2;
       return { s: { r: 0, c: start }, e: { r: 0, c: start + 1 } };
     }),
-  ] as XLSX.Range[];
+    ...mulokList.map((_, idx) => {
+      const start = 4 + SUBJECTS.length * 2 + idx * 2;
+      return { s: { r: 0, c: start }, e: { r: 0, c: start + 1 } };
+    }),
+  ];
+  ws["!merges"] = merges;
 
   const headerRows = 2;
   for (let r = headerRows; r < headerRows + minRows; r++) {
@@ -815,6 +1020,7 @@ export function downloadTemplateNilaiUjianKelasExcel(
       right: { style: "thin", color: { rgb: "111827" } },
     },
     protection: { locked: false },
+    numFmt: "0",
   };
 
   const lastCol = headerTop.length - 1;
@@ -900,18 +1106,31 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
 
     const maxCols = Math.max(top.length, sub.length);
     const colMap: Array<{ col: number; subject: Subject; kind: "tertulis" | "praktek" }> = [];
+    const mulokColMap: Array<{ col: number; mulok: AvailableMulok; kind: "tertulis" | "praktek" }> = [];
+    
     for (let c = 0; c < maxCols; c++) {
       const sk = norm(sub[c]);
       if (sk !== "v1" && sk !== "v-1" && sk !== "v2" && sk !== "v-2") continue;
       const kind = sk === "v2" || sk === "v-2" ? "praktek" : "tertulis";
       const direct = str(top[c]).trim();
       const subjRaw = direct ? direct : str(top[c - 1]).trim();
+      
+      // Try Subject first
       const subj = subjectFromTemplateHeader(subjRaw);
-      if (!subj) continue;
-      colMap.push({ col: c, subject: subj, kind });
+      if (subj) {
+        colMap.push({ col: c, subject: subj, kind });
+        continue;
+      }
+      
+      // Try Mulok
+      const mulok = mulokFromTemplateHeader(subjRaw);
+      if (mulok) {
+        mulokColMap.push({ col: c, mulok, kind });
+        continue;
+      }
     }
 
-    if (colMap.length === 0) {
+    if (colMap.length === 0 && mulokColMap.length === 0) {
       return {
         rows: [],
         warnings,
@@ -933,6 +1152,7 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
       if (isEmpty) continue;
 
       const values: NilaiUjianKelasRow["values"] = {};
+      const mulokValues: NilaiUjianKelasRow["mulokValues"] = {};
       const rowErrors: string[] = [];
       if (!nama) rowErrors.push("Nama Siswa kosong.");
       if (!nisn) rowErrors.push("NISN kosong.");
@@ -948,8 +1168,20 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
           rowErrors.push(`Nilai ${m.kind === "tertulis" ? "V-1" : "V-2"} ${m.subject} tidak valid (0–100).`);
         }
       }
+      
+      for (const m of mulokColMap) {
+        const v = clampNilaiOrNull(worksheetValueAt(ws, r, m.col) ?? row[m.col]);
+        if (v !== null) {
+          mulokValues[m.mulok] = mulokValues[m.mulok] ?? {};
+          mulokValues[m.mulok]![m.kind] = v;
+        }
+        const raw = str(worksheetValueAt(ws, r, m.col) ?? row[m.col]).trim();
+        if (raw && v === null) {
+          rowErrors.push(`Nilai ${m.kind === "tertulis" ? "V-1" : "V-2"} ${m.mulok} tidak valid (0–100).`);
+        }
+      }
 
-      rows.push({ excelRow: r + 1, no, nama, nisn, kelas: "", values, errors: rowErrors });
+      rows.push({ excelRow: r + 1, no, nama, nisn, kelas: "", values, mulokValues, errors: rowErrors });
     }
     return { rows, warnings, errors };
   }

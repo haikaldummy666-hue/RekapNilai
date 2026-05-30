@@ -8,6 +8,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Identitas, NilaiSiswa, Student } from "@/types/student.types";
+import type { AvailableMulok } from "@/types/mulok.types";
 import type { NilaiHistoryEntry } from "@/types/nilai.types";
 import { emptyNilai } from "@/data/sampleData";
 import type { Subject } from "@/data/subjects";
@@ -72,6 +73,8 @@ interface StudentState {
   ) => void;
   updatePraktek: (id: string, subject: Subject, value: number) => void;
   updateUjianTertulis: (id: string, subject: Subject, value: number) => void;
+  updatePraktekMulok: (id: string, mulok: AvailableMulok, value: number) => void;
+  updateUjianMulok: (id: string, mulok: AvailableMulok, value: number) => void;
   applyUjianKelasBulk: (
     updates: Array<{
       id: string;
@@ -185,11 +188,19 @@ function sanitizeNilai(raw: unknown): NilaiSiswa {
   const ujianTertulis = (
     typeof r.ujianTertulis === "object" && r.ujianTertulis ? r.ujianTertulis : {}
   ) as Record<string, unknown>;
+  const ujianMulok = (
+    typeof r.ujianMulok === "object" && r.ujianMulok ? r.ujianMulok : {}
+  ) as Record<string, unknown>;
+  const praktekMulok = (
+    typeof r.praktekMulok === "object" && r.praktekMulok ? r.praktekMulok : {}
+  ) as Record<string, unknown>;
 
   const out: NilaiSiswa = {
     kurmer: base.kurmer,
     praktek: base.praktek,
     ujianTertulis: base.ujianTertulis,
+    ujianMulok: base.ujianMulok,
+    praktekMulok: base.praktekMulok,
     peringkatKelas:
       typeof r.peringkatKelas === "number" && Number.isFinite(r.peringkatKelas)
         ? r.peringkatKelas
@@ -206,6 +217,12 @@ function sanitizeNilai(raw: unknown): NilaiSiswa {
     };
     out.praktek[s] = typeof praktek[s] === "number" ? (praktek[s] as number) : 0;
     out.ujianTertulis[s] = typeof ujianTertulis[s] === "number" ? (ujianTertulis[s] as number) : 0;
+  });
+
+  // Sanitize Mulok values
+  (Object.keys(base.ujianMulok) as any[]).forEach((m) => {
+    out.ujianMulok[m as any] = typeof ujianMulok[m] === "number" ? (ujianMulok[m] as number) : 0;
+    out.praktekMulok[m as any] = typeof praktekMulok[m] === "number" ? (praktekMulok[m] as number) : 0;
   });
 
   return out;
@@ -381,6 +398,38 @@ export const useStudentStore = create<StudentState>()(
                 newValue: value,
               }
             );
+          }),
+        })),
+
+      updatePraktekMulok: (id, mulok, value) =>
+        set((st) => ({
+          students: st.students.map((s) => {
+            if (s.id !== id) return s;
+            const oldValue = s.nilai.praktekMulok[mulok];
+            if (oldValue === value) return s; // No change
+            return touch({
+              ...s,
+              nilai: {
+                ...s.nilai,
+                praktekMulok: { ...s.nilai.praktekMulok, [mulok]: value },
+              },
+            });
+          }),
+        })),
+
+      updateUjianMulok: (id, mulok, value) =>
+        set((st) => ({
+          students: st.students.map((s) => {
+            if (s.id !== id) return s;
+            const oldValue = s.nilai.ujianMulok[mulok];
+            if (oldValue === value) return s; // No change
+            return touch({
+              ...s,
+              nilai: {
+                ...s.nilai,
+                ujianMulok: { ...s.nilai.ujianMulok, [mulok]: value },
+              },
+            });
           }),
         })),
 

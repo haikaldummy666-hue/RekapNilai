@@ -1,4 +1,5 @@
 import type { Subject } from "@/data/subjects";
+import type { AvailableMulok } from "@/types/mulok.types";
 import type { NilaiHistoryLog } from "@/types/nilai.types";
 
 export interface Identitas {
@@ -26,6 +27,10 @@ export interface NilaiSiswa {
   kurmer: Record<Subject, NilaiKurmerRow>;
   praktek: Record<Subject, number>;
   ujianTertulis: Record<Subject, number>;
+  /** Nilai ujian Mulok (mata pelajaran lokal) */
+  ujianMulok: Record<AvailableMulok, number>;
+  /** Nilai praktek Mulok (mata pelajaran lokal) */
+  praktekMulok: Record<AvailableMulok, number>;
   peringkatKelas?: number;
 }
 

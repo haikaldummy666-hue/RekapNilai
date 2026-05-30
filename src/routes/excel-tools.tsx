@@ -6,6 +6,8 @@ import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard
 import { Button } from "@/components/ui/button";
 import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
+import { useMulokStore } from "@/stores/mulokStore";
+import { MulokManager } from "@/components/forms/MulokManager";
 import type { Subject } from "@/data/subjects";
 import {
   downloadTemplateExcel,
@@ -40,6 +42,7 @@ function ExcelToolsPage() {
   const applyUjianKelasBulk = useStudentStore((s) => s.applyUjianKelasBulk);
   const exportSnapshot = useStudentStore((s) => s.exportSnapshot);
   const importSnapshot = useStudentStore((s) => s.importSnapshot);
+  const mulokList = useMulokStore((s) => s.getMulokList());
   const inputRef = useRef<HTMLInputElement>(null);
   const inputSiswaRef = useRef<HTMLInputElement>(null);
   const inputBackupRef = useRef<HTMLInputElement>(null);
@@ -327,17 +330,20 @@ function ExcelToolsPage() {
         <ToolCard
           icon={<FileDown className="h-6 w-6" />}
           title="Download Template Nilai Ujian (Kelas)"
-          desc="Template .xlsx untuk input nilai Ujian Tertulis & Praktek semua siswa (berdasarkan NISN)."
+          desc="Template .xlsx untuk input nilai Ujian Tertulis & Praktek semua siswa (berdasarkan NISN). Edit mata pelajaran lokal menggunakan tombol 'Kelola Mulok'."
           action={
-            <Button
-              className="bg-gradient-primary text-primary-foreground"
-              onClick={() => {
-                downloadTemplateNilaiUjianKelasExcel(students);
-                toast.success("Template nilai ujian diunduh");
-              }}
-            >
-              <Download className="mr-2 h-4 w-4" /> Unduh Template
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                className="bg-gradient-primary text-primary-foreground"
+                onClick={() => {
+                  downloadTemplateNilaiUjianKelasExcel(students, undefined, "mi-2026", mulokList);
+                  toast.success("Template nilai ujian diunduh");
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" /> Unduh Template
+              </Button>
+              <MulokManager />
+            </div>
           }
         />
 
