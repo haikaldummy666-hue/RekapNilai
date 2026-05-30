@@ -44,10 +44,6 @@ function MulokManagerForm() {
   };
 
   const handleRemove = (mulok: AvailableMulok) => {
-    if (mulok === "Bahasa Sunda") {
-      toast.error("Bahasa Sunda tidak boleh dihapus (wajib sebagai Mulok)");
-      return;
-    }
     removeMulok(mulok);
     toast.success(`${mulok} dihapus`);
   };
@@ -135,7 +131,7 @@ export function MulokManager({ inline = false }: MulokManagerProps) {
         <DialogHeader>
           <DialogTitle>Kelola Mata Pelajaran Lokal (Mulok)</DialogTitle>
           <DialogDescription>
-            Tambahkan atau hapus mata pelajaran lokal. Bahasa Sunda wajib dan tidak bisa dihapus.
+            Tambahkan atau hapus mata pelajaran lokal. Bahasa Sunda otomatis ditambahkan, tapi bisa dihapus.
             Perubahan akan otomatis tercermin di template Excel yang diunduh.
           </DialogDescription>
         </DialogHeader>

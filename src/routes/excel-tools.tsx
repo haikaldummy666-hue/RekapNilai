@@ -330,7 +330,7 @@ function ExcelToolsPage() {
         <ToolCard
           icon={<FileDown className="h-6 w-6" />}
           title="Download Template Nilai Ujian (Kelas)"
-          desc="Template .xlsx untuk input nilai Ujian Tertulis & Praktek semua siswa (berdasarkan NISN). Edit mata pelajaran lokal menggunakan tombol 'Kelola Mulok'."
+          desc="Template .xlsx untuk input nilai Ujian Tertulis & Praktek semua siswa (berdasarkan NISN). Mata pelajaran lokal (Mulok) otomatis ikut serta dan bisa disesuaikan lewat 'Kelola Mulok'."
           action={
             <div className="flex gap-2">
               <Button
