@@ -67,7 +67,7 @@ interface StudentState {
   updateKurmer: (
     id: string,
     subject: Subject,
-    field: "k5s1" | "k5s2" | "k6s1",
+    field: "k5s1" | "k5s2" | "k6s1" | "k6s2",
     value: number,
   ) => void;
   updatePraktek: (id: string, subject: Subject, value: number) => void;
@@ -202,6 +202,7 @@ function sanitizeNilai(raw: unknown): NilaiSiswa {
       k5s1: typeof row?.k5s1 === "number" ? row.k5s1 : 0,
       k5s2: typeof row?.k5s2 === "number" ? row.k5s2 : 0,
       k6s1: typeof row?.k6s1 === "number" ? row.k6s1 : 0,
+      k6s2: typeof row?.k6s2 === "number" ? row.k6s2 : 0,
     };
     out.praktek[s] = typeof praktek[s] === "number" ? (praktek[s] as number) : 0;
     out.ujianTertulis[s] = typeof ujianTertulis[s] === "number" ? (ujianTertulis[s] as number) : 0;
@@ -475,7 +476,7 @@ export const useStudentStore = create<StudentState>()(
             // Track kurmer changes
             Object.entries(nilai.kurmer).forEach(([subject, newRow]) => {
               const oldRow = oldNilai.kurmer[subject as Subject];
-              (["k5s1", "k5s2", "k6s1"] as const).forEach((field) => {
+              (["k5s1", "k5s2", "k6s1", "k6s2"] as const).forEach((field) => {
                 if (oldRow[field] !== newRow[field]) {
                   result = addHistoryEntry(result, {
                     type: "kurmer",

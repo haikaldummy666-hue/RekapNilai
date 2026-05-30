@@ -9,7 +9,7 @@ function mkRecord<T>(fn: (s: Subject, i: number) => T): Record<Subject, T> {
 
 export function emptyNilai(): NilaiSiswa {
   return {
-    kurmer: mkRecord(() => ({ k5s1: 0, k5s2: 0, k6s1: 0 })),
+    kurmer: mkRecord(() => ({ k5s1: 0, k5s2: 0, k6s1: 0, k6s2: 0 })),
     praktek: mkRecord(() => 0),
     ujianTertulis: mkRecord(() => 0),
     peringkatKelas: undefined,

@@ -26,7 +26,7 @@ describe("nilaiFillSummary", () => {
   it("returns completed when all fields are filled", () => {
     const nilai = emptyNilai();
     for (const s of SUBJECTS) {
-      nilai.kurmer[s] = { k5s1: 80, k5s2: 80, k6s1: 80 };
+      nilai.kurmer[s] = { k5s1: 80, k5s2: 80, k6s1: 80, k6s2: 80 };
       nilai.ujianTertulis[s] = 80;
       nilai.praktek[s] = 80;
     }

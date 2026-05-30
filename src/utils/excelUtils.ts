@@ -85,11 +85,11 @@ export function downloadTemplateExcel(filename = "Template-Rekap-Nilai-MI.xlsx")
 
   // Kurmer
   const kurmer: (string | number)[][] = [
-    ["No", "Mata Pelajaran", "Kelas 5 Sem 1", "Kelas 5 Sem 2", "Kelas 6 Sem 1"],
-    ...SUBJECTS.map((s, i) => [i + 1, s, "", "", ""]),
+    ["No", "Mata Pelajaran", "Kelas 5 Sem 1", "Kelas 5 Sem 2", "Kelas 6 Sem 1", "Kelas 6 Sem 2"],
+    ...SUBJECTS.map((s, i) => [i + 1, s, "", "", "", ""]),
   ];
   const wsK = XLSX.utils.aoa_to_sheet(kurmer);
-  wsK["!cols"] = [{ wch: 4 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+  wsK["!cols"] = [{ wch: 4 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
   wsK["!freeze"] = { xSplit: 0, ySplit: 1 };
   XLSX.utils.book_append_sheet(wb, wsK, "Kurmer");
 
@@ -116,8 +116,8 @@ export function downloadTemplateExcel(filename = "Template-Rekap-Nilai-MI.xlsx")
 
 function buildKurmerTemplateSheet(): XLSX.WorkSheet {
   const kurmer: (string | number)[][] = [
-    ["No", "Mata Pelajaran", "Kelas 5 Sem 1", "Kelas 5 Sem 2", "Kelas 6 Sem 1"],
-    ...SUBJECTS.map((s, i) => [i + 1, s, "", "", ""]),
+    ["No", "Mata Pelajaran", "Kelas 5 Sem 1", "Kelas 5 Sem 2", "Kelas 6 Sem 1", "Kelas 6 Sem 2"],
+    ...SUBJECTS.map((s, i) => [i + 1, s, "", "", "", ""]),
   ];
   const ws = XLSX.utils.aoa_to_sheet(kurmer);
   ws["!cols"] = [{ wch: 4 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
@@ -357,7 +357,12 @@ export async function importFromExcel(file: File): Promise<ImportResult> {
     SUBJECTS.forEach((s) => {
       const row = findSubjectRow(arr, s);
       if (row) {
-        nilai.kurmer[s] = { k5s1: num(row[2]), k5s2: num(row[3]), k6s1: num(row[4]) };
+        nilai.kurmer[s] = {
+          k5s1: num(row[2]),
+          k5s2: num(row[3]),
+          k6s1: num(row[4]),
+          k6s2: num(row[5]),
+        };
       }
     });
   } else warnings.push("Sheet 'Kurmer' tidak ditemukan.");
@@ -553,18 +558,20 @@ export function exportHasilAkhirExcel(student: Student, filename?: string) {
     "Kls 5 Sem 1",
     "Kls 5 Sem 2",
     "Kls 6 Sem 1",
+    "Kls 6 Sem 2",
     "Jumlah",
     "Rata-rata",
   ];
   const kRows = SUBJECTS.map((s, i) => {
     const r = nilai.kurmer[s];
-    const sum = r.k5s1 + r.k5s2 + r.k6s1;
-    return [i + 1, s, r.k5s1, r.k5s2, r.k6s1, sum, sum / 3];
+    const sum = r.k5s1 + r.k5s2 + r.k6s1 + r.k6s2;
+    return [i + 1, s, r.k5s1, r.k5s2, r.k6s1, r.k6s2, sum, sum / 4];
   });
   const wsK = XLSX.utils.aoa_to_sheet([kHeader, ...kRows]);
   wsK["!cols"] = [
     { wch: 4 },
     { wch: 24 },
+    { wch: 12 },
     { wch: 12 },
     { wch: 12 },
     { wch: 12 },

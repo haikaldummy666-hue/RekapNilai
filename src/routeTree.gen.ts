@@ -10,12 +10,12 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as _rootSpaRouteImport } from './routes/__root.spa'
+import { Route as UjianTertulisRouteImport } from './routes/ujian-tertulis'
 import { Route as SklIjazahRouteImport } from './routes/skl-ijazah'
 import { Route as SiswaRouteImport } from './routes/siswa'
 import { Route as ScanningRouteImport } from './routes/scanning'
 import { Route as ProfilRouteImport } from './routes/profil'
 import { Route as PraktekRouteImport } from './routes/praktek'
-import { Route as UjianTertulisRouteImport } from './routes/ujian-tertulis'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KurmerRouteImport } from './routes/kurmer'
 import { Route as IdentitasRouteImport } from './routes/identitas'
@@ -29,6 +29,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const _rootSpaRoute = _rootSpaRouteImport.update({
   id: '/__root/spa',
   path: '/spa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UjianTertulisRoute = UjianTertulisRouteImport.update({
+  id: '/ujian-tertulis',
+  path: '/ujian-tertulis',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SklIjazahRoute = SklIjazahRouteImport.update({
@@ -54,11 +59,6 @@ const ProfilRoute = ProfilRouteImport.update({
 const PraktekRoute = PraktekRouteImport.update({
   id: '/praktek',
   path: '/praktek',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const UjianTertulisRoute = UjianTertulisRouteImport.update({
-  id: '/ujian-tertulis',
-  path: '/ujian-tertulis',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -118,11 +118,11 @@ export interface FileRoutesByFullPath {
   '/kurmer': typeof KurmerRoute
   '/login': typeof LoginRoute
   '/praktek': typeof PraktekRoute
-  '/ujian-tertulis': typeof UjianTertulisRoute
   '/profil': typeof ProfilRoute
   '/scanning': typeof ScanningRoute
   '/siswa': typeof SiswaRoute
   '/skl-ijazah': typeof SklIjazahRoute
+  '/ujian-tertulis': typeof UjianTertulisRoute
   '/spa': typeof _rootSpaRoute
 }
 export interface FileRoutesByTo {
@@ -136,11 +136,11 @@ export interface FileRoutesByTo {
   '/kurmer': typeof KurmerRoute
   '/login': typeof LoginRoute
   '/praktek': typeof PraktekRoute
-  '/ujian-tertulis': typeof UjianTertulisRoute
   '/profil': typeof ProfilRoute
   '/scanning': typeof ScanningRoute
   '/siswa': typeof SiswaRoute
   '/skl-ijazah': typeof SklIjazahRoute
+  '/ujian-tertulis': typeof UjianTertulisRoute
   '/spa': typeof _rootSpaRoute
 }
 export interface FileRoutesById {
@@ -155,11 +155,11 @@ export interface FileRoutesById {
   '/kurmer': typeof KurmerRoute
   '/login': typeof LoginRoute
   '/praktek': typeof PraktekRoute
-  '/ujian-tertulis': typeof UjianTertulisRoute
   '/profil': typeof ProfilRoute
   '/scanning': typeof ScanningRoute
   '/siswa': typeof SiswaRoute
   '/skl-ijazah': typeof SklIjazahRoute
+  '/ujian-tertulis': typeof UjianTertulisRoute
   '/__root/spa': typeof _rootSpaRoute
 }
 export interface FileRouteTypes {
@@ -175,11 +175,11 @@ export interface FileRouteTypes {
     | '/kurmer'
     | '/login'
     | '/praktek'
-    | '/ujian-tertulis'
     | '/profil'
     | '/scanning'
     | '/siswa'
     | '/skl-ijazah'
+    | '/ujian-tertulis'
     | '/spa'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -193,11 +193,11 @@ export interface FileRouteTypes {
     | '/kurmer'
     | '/login'
     | '/praktek'
-    | '/ujian-tertulis'
     | '/profil'
     | '/scanning'
     | '/siswa'
     | '/skl-ijazah'
+    | '/ujian-tertulis'
     | '/spa'
   id:
     | '__root__'
@@ -211,11 +211,11 @@ export interface FileRouteTypes {
     | '/kurmer'
     | '/login'
     | '/praktek'
-    | '/ujian-tertulis'
     | '/profil'
     | '/scanning'
     | '/siswa'
     | '/skl-ijazah'
+    | '/ujian-tertulis'
     | '/__root/spa'
   fileRoutesById: FileRoutesById
 }
@@ -230,11 +230,11 @@ export interface RootRouteChildren {
   KurmerRoute: typeof KurmerRoute
   LoginRoute: typeof LoginRoute
   PraktekRoute: typeof PraktekRoute
-  UjianTertulisRoute: typeof UjianTertulisRoute
   ProfilRoute: typeof ProfilRoute
   ScanningRoute: typeof ScanningRoute
   SiswaRoute: typeof SiswaRoute
   SklIjazahRoute: typeof SklIjazahRoute
+  UjianTertulisRoute: typeof UjianTertulisRoute
   _rootSpaRoute: typeof _rootSpaRoute
 }
 
@@ -245,6 +245,13 @@ declare module '@tanstack/react-router' {
       path: '/spa'
       fullPath: '/spa'
       preLoaderRoute: typeof _rootSpaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ujian-tertulis': {
+      id: '/ujian-tertulis'
+      path: '/ujian-tertulis'
+      fullPath: '/ujian-tertulis'
+      preLoaderRoute: typeof UjianTertulisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/skl-ijazah': {
@@ -280,13 +287,6 @@ declare module '@tanstack/react-router' {
       path: '/praktek'
       fullPath: '/praktek'
       preLoaderRoute: typeof PraktekRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/ujian-tertulis': {
-      id: '/ujian-tertulis'
-      path: '/ujian-tertulis'
-      fullPath: '/ujian-tertulis'
-      preLoaderRoute: typeof UjianTertulisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -366,11 +366,11 @@ const rootRouteChildren: RootRouteChildren = {
   KurmerRoute: KurmerRoute,
   LoginRoute: LoginRoute,
   PraktekRoute: PraktekRoute,
-  UjianTertulisRoute: UjianTertulisRoute,
   ProfilRoute: ProfilRoute,
   ScanningRoute: ScanningRoute,
   SiswaRoute: SiswaRoute,
   SklIjazahRoute: SklIjazahRoute,
+  UjianTertulisRoute: UjianTertulisRoute,
   _rootSpaRoute: _rootSpaRoute,
 }
 export const routeTree = rootRouteImport

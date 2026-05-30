@@ -6,7 +6,7 @@ export interface NilaiHistoryEntry {
   timestamp: string; // ISO date string
   type: "kurmer" | "praktek" | "ujianTertulis" | "peringkat";
   subject?: Subject;
-  field?: "k5s1" | "k5s2" | "k6s1";
+  field?: "k5s1" | "k5s2" | "k6s1" | "k6s2";
   oldValue: number | undefined;
   newValue: number | undefined;
 }

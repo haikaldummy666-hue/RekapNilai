@@ -746,6 +746,7 @@ function DetailTableKurmer({ student }: { student: Student }) {
             <TableHead className="text-center">Kls 5 S1</TableHead>
             <TableHead className="text-center">Kls 5 S2</TableHead>
             <TableHead className="text-center">Kls 6 S1</TableHead>
+            <TableHead className="text-center">Kls 6 S2</TableHead>
             <TableHead className="text-center">Rata</TableHead>
           </TableRow>
         </TableHeader>
@@ -760,6 +761,7 @@ function DetailTableKurmer({ student }: { student: Student }) {
                 <TableCell className="text-center tabular-nums">{formatNilai(r.k5s1)}</TableCell>
                 <TableCell className="text-center tabular-nums">{formatNilai(r.k5s2)}</TableCell>
                 <TableCell className="text-center tabular-nums">{formatNilai(r.k6s1)}</TableCell>
+                <TableCell className="text-center tabular-nums">{formatNilai(r.k6s2)}</TableCell>
                 <TableCell className="text-center font-semibold tabular-nums">
                   {formatNilai(avg)}
                 </TableCell>

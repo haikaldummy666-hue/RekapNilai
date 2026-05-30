@@ -34,7 +34,7 @@ function cloneKurmer(src: KurmerDraft): KurmerDraft {
   const out = {} as KurmerDraft;
   SUBJECTS.forEach((s) => {
     const r = src[s];
-    out[s] = { k5s1: r.k5s1, k5s2: r.k5s2, k6s1: r.k6s1 };
+    out[s] = { k5s1: r.k5s1, k5s2: r.k5s2, k6s1: r.k6s1, k6s2: r.k6s2 };
   });
   return out;
 }
@@ -46,6 +46,7 @@ function isKurmerEqual(a: KurmerDraft, b: KurmerDraft): boolean {
     if (ra.k5s1 !== rb.k5s1) return false;
     if (ra.k5s2 !== rb.k5s2) return false;
     if (ra.k6s1 !== rb.k6s1) return false;
+    if (ra.k6s2 !== rb.k6s2) return false;
   }
   return true;
 }
@@ -104,7 +105,7 @@ function KurmerPage() {
     if (!active) return;
     const cleared = {} as KurmerDraft;
     SUBJECTS.forEach((s) => {
-      cleared[s] = { k5s1: 0, k5s2: 0, k6s1: 0 };
+      cleared[s] = { k5s1: 0, k5s2: 0, k6s1: 0, k6s2: 0 };
     });
     draftOwnerRef.current = active.id;
     draftRef.current = cleared;
@@ -120,7 +121,7 @@ function KurmerPage() {
 
     for (const s of SUBJECTS) {
       const r = current[s];
-      const vals = [r.k5s1, r.k5s2, r.k6s1];
+      const vals = [r.k5s1, r.k5s2, r.k6s1, r.k6s2];
       if (vals.some((n) => Number.isNaN(n) || n < 0 || n > 100)) {
         toast.error(`Nilai ${s} harus 0–100`);
         return;
@@ -162,7 +163,7 @@ function KurmerPage() {
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
         title="Raport Kurmer"
-        description="Nilai Kelas 5 Semester 1 & 2, dan Kelas 6 Semester 1. Jumlah & rata-rata dihitung otomatis."
+        description="Nilai Kelas 5 Semester 1 & 2, dan Kelas 6 Semester 1 & 2. Jumlah & rata-rata dihitung otomatis."
       />
       {!active ? (
         <EmptyStudent />
@@ -222,6 +223,7 @@ function KurmerPage() {
                   <TableHead className="text-center">Kls 5 Sem 1</TableHead>
                   <TableHead className="text-center">Kls 5 Sem 2</TableHead>
                   <TableHead className="text-center">Kls 6 Sem 1</TableHead>
+                  <TableHead className="text-center">Kls 6 Sem 2</TableHead>
                   <TableHead className="text-center">Jumlah</TableHead>
                   <TableHead className="text-center">Rata-rata</TableHead>
                 </TableRow>
@@ -229,7 +231,7 @@ function KurmerPage() {
               <TableBody>
                 {SUBJECTS.map((s, i) => {
                   const r = currentDraft?.[s] ?? active.nilai.kurmer[s];
-                  const sum = r.k5s1 + r.k5s2 + r.k6s1;
+                  const sum = r.k5s1 + r.k5s2 + r.k6s1 + r.k6s2;
                   const rata = rataKurmerPerMapel(
                     { ...active.nilai, kurmer: currentDraft ?? active.nilai.kurmer },
                     s,
@@ -257,6 +259,13 @@ function KurmerPage() {
                           value={r.k6s1}
                           onCommit={(v) => setCell(s, "k6s1", v)}
                           ariaLabel={`${s} Kelas 6 Sem 1`}
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <NilaiInput
+                          value={r.k6s2}
+                          onCommit={(v) => setCell(s, "k6s2", v)}
+                          ariaLabel={`${s} Kelas 6 Sem 2`}
                         />
                       </TableCell>
                       <TableCell className="text-center tabular-nums">{sum}</TableCell>

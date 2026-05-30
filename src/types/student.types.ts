@@ -19,6 +19,7 @@ export interface NilaiKurmerRow {
   k5s1: number;
   k5s2: number;
   k6s1: number;
+  k6s2: number;
 }
 
 export interface NilaiSiswa {

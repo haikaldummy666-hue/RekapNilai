@@ -7,7 +7,7 @@ export type NilaiFillStatus = "not started" | "in progress" | "completed";
 export function rataKurmerPerMapel(nilai: NilaiSiswa, subject: Subject): number {
   const r = nilai.kurmer[subject];
   if (!r) return 0;
-  return (r.k5s1 + r.k5s2 + r.k6s1) / 3;
+  return (r.k5s1 + r.k5s2 + r.k6s1 + r.k6s2) / 4;
 }
 
 export function rataUjianPerMapel(nilai: NilaiSiswa, subject: Subject): number {
@@ -77,10 +77,11 @@ export function nilaiFillSummary(nilai: NilaiSiswa): {
 
   for (const s of SUBJECTS) {
     const k = nilai.kurmer[s];
-    total += 3;
+    total += 4;
     if (isFilled(k?.k5s1)) filled++;
     if (isFilled(k?.k5s2)) filled++;
     if (isFilled(k?.k6s1)) filled++;
+    if (isFilled(k?.k6s2)) filled++;
 
     total += 1;
     if (isFilled(nilai.ujianTertulis[s])) filled++;
