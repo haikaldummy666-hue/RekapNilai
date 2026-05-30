@@ -202,30 +202,43 @@ function buildUjianTertulisKelasTemplateSheet(
   // Freeze panes: kolom No dan Nama Siswa tetap terlihat
   ws["!freeze"] = { xSplit: 2, ySplit: 1 };
 
-  // Setup sheet protection: hanya kolom nilai yang bisa di-edit
-  // Kunci semua cell terlebih dahulu
   const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+
+  // Default all cells to unlocked, then lock the identity columns and headers.
   for (let r = range.s.r; r <= range.e.r; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
       const cell = ensureCell(ws, r, c);
-      // Tandai semua cell sebagai locked
       if (!cell.s) cell.s = {};
-      (cell.s as any).locked = true;
+      (cell.s as any).protection = { locked: false };
     }
   }
 
-  // Buka lock untuk kolom nilai (mulai dari kolom C = index 2, row 2 ke bawah)
-  for (let r = 1; r < dataRows.length + 1; r++) {
-    for (let c = 2; c < 2 + allSubjects.length; c++) {
+  // Lock header rows completely.
+  for (let r = 0; r <= 1; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
       const cell = ensureCell(ws, r, c);
       if (!cell.s) cell.s = {};
-      (cell.s as any).locked = false;
-      // Set number format untuk hanya angka
+      (cell.s as any).protection = { locked: true };
+    }
+  }
+
+  // Lock identity columns (No, Nama Siswa) for all data rows.
+  for (let r = 2; r <= range.e.r; r++) {
+    for (let c = 0; c <= 3; c++) {
+      const cell = ensureCell(ws, r, c);
+      if (!cell.s) cell.s = {};
+      (cell.s as any).protection = { locked: true };
+    }
+  }
+
+  // Set number format for editable nilai cells.
+  for (let r = 2; r <= range.e.r; r++) {
+    for (let c = 4; c < 4 + allSubjects.length; c++) {
+      const cell = ensureCell(ws, r, c);
       cell.z = "0";
     }
   }
 
-  // Proteksi sheet dengan password kosong (tidak bisa diubah struktur, tapi bisa edit nilai)
   ws["!protect"] = {
     sheet: true,
     content: true,
