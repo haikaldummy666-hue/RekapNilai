@@ -431,6 +431,7 @@ function ExcelToolsPage() {
           action={
             <div className="flex gap-2">
               <Button
+                type="button"
                 className="bg-gradient-primary text-primary-foreground"
                 onClick={() => {
                   downloadTemplateNilaiUjianKelasExcel(students, mulokList);

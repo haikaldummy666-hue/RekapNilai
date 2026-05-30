@@ -1099,8 +1099,15 @@ export function downloadTemplateNilaiUjianKelasExcel(
 ) {
   const wb = XLSX.utils.book_new();
 
-  const headerTop: (string | number)[] = ["No", "NISN", "Nama Lengkap", "JK"];
-  const headerSub: (string | number)[] = ["", "", "", ""];
+  const priorSemesterLabels = [
+    "Kelas 5 Sem 1",
+    "Kelas 5 Sem 2",
+    "Kelas 6 Sem 1",
+    "Kelas 6 Sem 2",
+  ];
+
+  const headerTop: (string | number)[] = ["No", "NISN", "Nama Lengkap", "JK", "Nilai Semester Sebelumnya", "", "", ""];
+  const headerSub: (string | number)[] = ["", "", "", "", ...priorSemesterLabels];
   
   // Add SUBJECTS columns
   for (const s of SUBJECTS) {
@@ -1123,7 +1130,7 @@ export function downloadTemplateNilaiUjianKelasExcel(
     const nisn = s?.identitas.nisn ?? "";
     const nama = s?.identitas.nama ?? "";
     const jk = s?.identitas.jenisKelamin ?? "";
-    const row: (string | number)[] = [no, nisn, nama, jk];
+    const row: (string | number)[] = [no, nisn, nama, jk, "", "", "", ""];
     
     // Add SUBJECTS values
     for (const subj of SUBJECTS) {
@@ -1139,15 +1146,16 @@ export function downloadTemplateNilaiUjianKelasExcel(
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!freeze"] = { xSplit: 4, ySplit: 2 };
+  ws["!freeze"] = { xSplit: 8, ySplit: 2 };
   
-  const colCount = SUBJECTS.length + mulokList.length;
+  const subjectColumns = SUBJECTS.length + mulokList.length;
   ws["!cols"] = [
     { wch: 4 },
     { wch: 16 },
     { wch: 30 },
     { wch: 6 },
-    ...Array.from({ length: colCount * 2 }).map(() => ({ wch: 6 })),
+    ...Array.from({ length: priorSemesterLabels.length }).map(() => ({ wch: 12 })),
+    ...Array.from({ length: subjectColumns * 2 }).map(() => ({ wch: 6 })),
   ];
   
   const merges: XLSX.Range[] = [
@@ -1155,12 +1163,13 @@ export function downloadTemplateNilaiUjianKelasExcel(
     { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
     { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
     { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
+    { s: { r: 0, c: 4 }, e: { r: 0, c: 7 } },
     ...SUBJECTS.map((_, idx) => {
-      const start = 4 + idx * 2;
+      const start = 8 + idx * 2;
       return { s: { r: 0, c: start }, e: { r: 0, c: start + 1 } };
     }),
     ...mulokList.map((_, idx) => {
-      const start = 4 + SUBJECTS.length * 2 + idx * 2;
+      const start = 8 + SUBJECTS.length * 2 + idx * 2;
       return { s: { r: 0, c: start }, e: { r: 0, c: start + 1 } };
     }),
   ];
