@@ -42,7 +42,7 @@ function ExcelToolsPage() {
   const applyUjianKelasBulk = useStudentStore((s) => s.applyUjianKelasBulk);
   const exportSnapshot = useStudentStore((s) => s.exportSnapshot);
   const importSnapshot = useStudentStore((s) => s.importSnapshot);
-  const mulokList = useMulokStore((s) => s.getMulokList());
+  const mulokList = useMulokStore((s) => s.config.selected);
   const inputRef = useRef<HTMLInputElement>(null);
   const inputSiswaRef = useRef<HTMLInputElement>(null);
   const inputBackupRef = useRef<HTMLInputElement>(null);

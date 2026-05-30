@@ -27,10 +27,10 @@ interface MulokManagerProps {
 }
 
 function MulokManagerForm() {
-  const { config, addMulok, removeMulok, getMulokList } = useMulokStore();
+  const { config, addMulok, removeMulok } = useMulokStore();
   const [selectedMulok, setSelectedMulok] = useState<AvailableMulok | "">("");
 
-  const mulokList = getMulokList();
+  const mulokList = config.selected;
   const availableToAdd = AVAILABLE_MULOK.filter((m) => !mulokList.includes(m));
 
   const handleAdd = () => {
