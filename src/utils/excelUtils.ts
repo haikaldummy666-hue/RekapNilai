@@ -1159,11 +1159,13 @@ export function downloadTemplateNilaiUjianKelasExcel(
     const jk = s?.identitas.jenisKelamin ?? "";
     const row: (string | number)[] = [no, nama, jk];
 
-    // Add empty value cells for each subject (4 cols each: V-1, V-2, VI-1, VI-2)
-    for (const _subj of SUBJECTS) {
-      row.push("", "", "", "");
+    // Add value cells for each subject (4 cols each: V-1, V-2, VI-1, VI-2)
+    for (const subj of SUBJECTS) {
+      const k = s?.nilai?.kurmer?.[subj];
+      row.push(k?.k5s1 ?? "", k?.k5s2 ?? "", k?.k6s1 ?? "", k?.k6s2 ?? "");
     }
-    for (const _m of mulokList) {
+    for (const m of mulokList) {
+      // Kurmer does not support mulok data in state, so leave empty
       row.push("", "", "", "");
     }
     rows.push(row);
@@ -1710,11 +1712,13 @@ export function downloadTemplateNilaiTunggalKelasExcel(
     const jk = s?.identitas.jenisKelamin ?? "";
     const row: (string | number)[] = [no, nama, jk];
 
-    for (const _subj of SUBJECTS) {
-      row.push("");
+    for (const subj of SUBJECTS) {
+      const val = s ? (sheetName === "Ujian Tertulis" ? s.nilai.ujianTertulis[subj] : s.nilai.praktek[subj]) : "";
+      row.push(val ?? "");
     }
-    for (const _m of mulokList) {
-      row.push("");
+    for (const m of mulokList) {
+      const val = s ? (sheetName === "Ujian Tertulis" ? s.nilai.ujianMulok[m] : s.nilai.praktekMulok[m]) : "";
+      row.push(val ?? "");
     }
     rows.push(row);
   }
