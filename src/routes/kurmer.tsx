@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, Save, Trash2 } from "lucide-react";
+import { LoaderCircle, Save, Trash2, FileUp } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
 import { StudentSwitcher } from "@/components/layout/StudentSwitcher";
@@ -16,12 +16,18 @@ import {
 import { SUBJECTS, type Subject } from "@/data/subjects";
 import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
+import { useMulokStore } from "@/stores/mulokStore";
 import { useAppStateStore } from "@/stores/appStateStore";
 import type { NilaiKurmerRow } from "@/types/student.types";
 import { Button } from "@/components/ui/button";
 import { formatNilai } from "@/utils/formatUtils";
 import { rataKurmerPerMapel } from "@/utils/calculateUtils";
-import { downloadTemplateKurmerExcel } from "@/utils/excelUtils";
+import { 
+  downloadTemplateNilaiUjianKelasExcel, 
+  parseNilaiUjianKelasFromWorkbook, 
+  type NilaiUjianKelasParseResult 
+} from "@/utils/excelUtils";
+import * as XLSX from "xlsx";
 
 export const Route = createFileRoute("/kurmer")({
   head: () => ({ meta: [{ title: "Raport Kurmer — Rekap Nilai MI" }] }),
@@ -53,10 +59,15 @@ function isKurmerEqual(a: KurmerDraft, b: KurmerDraft): boolean {
 
 function KurmerPage() {
   const active = useActiveStudent();
+  const students = useStudentStore((s) => s.students);
   const setNilai = useStudentStore((s) => s.setNilai);
+  const updateKurmer = useStudentStore((s) => s.updateKurmer);
+  const mulokList = useMulokStore((s) => s.config.selected);
   const getDraft = useAppStateStore((s) => s.state.routes["/kurmer"]?.drafts);
   const setRouteDraft = useAppStateStore((s) => s.setRouteDraft);
   const removeRouteDraft = useAppStateStore((s) => s.removeRouteDraft);
+  
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const baselineRef = useRef<KurmerDraft | null>(null);
   const draftRef = useRef<KurmerDraft | null>(null);
@@ -84,6 +95,95 @@ function KurmerPage() {
   // Jika draft milik siswa lain (belum di-reset oleh effect), gunakan null
   // sehingga render fallback ke active.nilai langsung — tidak ada flash nilai lama
   const currentDraft = draftOwnerRef.current === active?.id ? draft : null;
+
+  // --- EXCEL IMPORT/EXPORT LOGIC ---
+  const nisnToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of students) {
+      const nisn = (s.identitas.nisn ?? "").trim();
+      if (nisn) m.set(nisn, s.id);
+    }
+    return m;
+  }, [students]);
+
+  const namaToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of students) {
+      const nama = (s.identitas.nama ?? "").trim().toLowerCase();
+      if (nama) m.set(nama, s.id);
+    }
+    return m;
+  }, [students]);
+
+  const findStudentId = (nisn: string, nama: string): string | undefined => {
+    if (nisn) {
+      const id = nisnToId.get(nisn);
+      if (id) return id;
+    }
+    const namaKey = nama.trim().toLowerCase();
+    if (namaKey) return namaToId.get(namaKey);
+    return undefined;
+  };
+
+  const processNilaiKelasRows = useCallback((parsed: NilaiUjianKelasParseResult) => {
+    const rows = parsed.rows;
+    const invalid = rows.filter((r) => r.errors.length > 0);
+    if (invalid.length > 0) {
+      toast.error(`Terdapat ${invalid.length} baris invalid. Perbaiki file dan coba lagi.`);
+      return;
+    }
+    
+    const hasKurmer = rows.some((r) => Object.keys(r.kurmerValues).length > 0);
+    if (!hasKurmer) {
+      toast.error("File tidak mengandung format nilai kurmer (V-1, V-2, dll) yang valid.");
+      return;
+    }
+
+    let matched = 0;
+    let notFound = 0;
+    for (const r of rows) {
+      const id = findStudentId(r.nisn, r.nama);
+      if (!id) {
+        notFound++;
+        continue;
+      }
+      matched++;
+      for (const [subject, vals] of Object.entries(r.kurmerValues)) {
+        for (const field of ["k5s1", "k5s2", "k6s1", "k6s2"] as const) {
+          if (vals?.[field] !== undefined) {
+            updateKurmer(id, subject as Subject, field, vals[field]!);
+          }
+        }
+      }
+    }
+
+    if (matched === 0) {
+      toast.error("Tidak ada data siswa yang cocok berdasarkan nama.");
+      return;
+    }
+    
+    toast.success(`Import selesai (${matched} siswa diperbarui)`);
+    if (notFound > 0) toast.warning(`${notFound} baris siswa tidak ditemukan, dilewati`);
+    
+    // Clear draft if it exists so we see the fresh updated value from global store
+    if (active) {
+      draftOwnerRef.current = null;
+      setDraft(null);
+      removeRouteDraft("/kurmer", active.id);
+    }
+  }, [findStudentId, updateKurmer, active, removeRouteDraft]);
+
+  const onImportNilaiKelas = useCallback(async (file: File) => {
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: "array" });
+      const parsed = parseNilaiUjianKelasFromWorkbook(wb);
+      processNilaiKelasRows(parsed);
+    } catch (e) {
+      toast.error("Gagal membaca file Excel");
+    }
+  }, [processNilaiKelasRows]);
+  // ---------------------------------
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;
@@ -171,6 +271,25 @@ function KurmerPage() {
         <PageCard
           actions={
             <div className="flex items-end gap-2">
+              <input
+                type="file"
+                className="hidden"
+                accept=".xlsx"
+                ref={inputRef}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onImportNilaiKelas(file);
+                  if (e.target) e.target.value = "";
+                }}
+              />
+              <Button
+                variant="outline"
+                className="border-dashed h-9"
+                onClick={() => inputRef.current?.click()}
+                title="Upload Excel Nilai Kurmer"
+              >
+                <FileUp className="mr-2 h-4 w-4" /> Upload
+              </Button>
               <StudentSwitcher
                 label="data siswa"
                 showClassFilter
@@ -179,7 +298,10 @@ function KurmerPage() {
                 templateDownload={{
                   label: "Download template Raport Kurmer",
                   onClick: () => {
-                    downloadTemplateKurmerExcel();
+                    const sorted = [...students].sort((a, b) => 
+                      (a.identitas.nama || "").localeCompare(b.identitas.nama || "")
+                    );
+                    downloadTemplateNilaiUjianKelasExcel(sorted, mulokList);
                     toast.success("Template Raport Kurmer diunduh");
                   },
                 }}
