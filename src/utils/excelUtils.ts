@@ -1,8 +1,17 @@
 import * as XLSX from "xlsx";
 import type { Subject } from "@/data/subjects";
 import { SUBJECTS } from "@/data/subjects";
-import type { Student, NilaiSiswa } from "@/types/student.types";
+import type { Student, Identitas, NilaiSiswa } from "@/types/student.types";
 import type { AvailableMulok } from "@/types/mulok.types";
+import { AVAILABLE_MULOK } from "@/types/mulok.types";
+import { clampNilai, formatTTL } from "@/utils/formatUtils";
+import { emptyNilai } from "@/data/sampleData";
+import {
+  buildHasilUjian,
+  buildHasilAkhir,
+  jumlahHasilAkhir,
+  rataKeseluruhan,
+} from "@/utils/calculateUtils";
 
 /**
  * Excel utilities (SheetJS).
@@ -15,6 +24,27 @@ import type { AvailableMulok } from "@/types/mulok.types";
  * mengatur lebar kolom, freeze pane, dan format angka. Untuk warna sel,
  * kami menggunakan workbook properties yang didukung (cellStyles via XLSX
  */
+
+/**
+ * Module-level helper: ensure a cell exists at (r, c) in a worksheet.
+ */
+function ensureCell(ws: XLSX.WorkSheet, r: number, c: number): XLSX.CellObject {
+  const addr = XLSX.utils.encode_cell({ r, c });
+  let cell = ws[addr] as XLSX.CellObject | undefined;
+  if (!cell) {
+    cell = { t: "s", v: "" } as XLSX.CellObject;
+    ws[addr] = cell;
+  }
+  return cell;
+}
+
+/**
+ * Module-level helper: set cell style at (r, c) in a worksheet.
+ */
+function setStyle(ws: XLSX.WorkSheet, r: number, c: number, style: any) {
+  const cell = ensureCell(ws, r, c);
+  cell.s = style;
+}
 
 /**
  * Helper function to download workbook
@@ -1016,6 +1046,9 @@ export type NilaiUjianKelasRow = {
   kelas: string;
   values: Partial<Record<Subject, { tertulis?: number; praktek?: number }>>;
   mulokValues: Partial<Record<AvailableMulok, { tertulis?: number; praktek?: number }>>;
+  /** Kurmer values from V-1/V-2/VI-1/VI-2 format */
+  kurmerValues: Partial<Record<Subject, { k5s1?: number; k5s2?: number; k6s1?: number; k6s2?: number }>>;
+  mulokKurmerValues: Partial<Record<AvailableMulok, { k5s1?: number; k5s2?: number; k6s1?: number; k6s2?: number }>>;
   errors: string[];
 };
 
@@ -1024,6 +1057,7 @@ export type NilaiUjianKelasParseResult = {
   warnings: string[];
   errors: string[];
 };
+
 
 function nilaiUjianKelasHeaders(): string[] {
   const base = ["No", "Nama Siswa", "NISN", "Kelas"];
@@ -1099,108 +1133,93 @@ export function downloadTemplateNilaiUjianKelasExcel(
 ) {
   const wb = XLSX.utils.book_new();
 
-  const priorSemesterLabels = [
-    "Kelas 5 Sem 1",
-    "Kelas 5 Sem 2",
-    "Kelas 6 Sem 1",
-    "Kelas 6 Sem 2",
-  ];
+  // Semester sub-labels under each subject
+  const semesterLabels = ["V-1", "V-2", "VI-1", "VI-2"];
 
-  const headerTop: (string | number)[] = ["No", "NISN", "Nama Lengkap", "JK", "Nilai Semester Sebelumnya", "", "", ""];
-  const headerSub: (string | number)[] = ["", "", "", "", ...priorSemesterLabels];
-  
-  // Add SUBJECTS columns
+  // Build header row 1: No | Nama Lengkap | JK | [Subject merged 4 cols] | [Mulok merged 4 cols]
+  const headerTop: (string | number)[] = ["No", "Nama Lengkap", "JK"];
+  const headerSub: (string | number)[] = ["", "", ""];
+
   for (const s of SUBJECTS) {
-    headerTop.push(displaySubjectTemplate(s), "");
-    headerSub.push("V-1", "V-2");
+    headerTop.push(displaySubjectTemplate(s), "", "", "");
+    headerSub.push(...semesterLabels);
   }
-  
-  // Add MULOK columns
   for (const m of mulokList) {
-    headerTop.push(displayMulokTemplate(m), "");
-    headerSub.push("V-1", "V-2");
+    headerTop.push(displayMulokTemplate(m), "", "", "");
+    headerSub.push(...semesterLabels);
   }
 
-  const minRows = Math.max(50, students.length);
   const rows: (string | number)[][] = [headerTop, headerSub];
 
-  for (let i = 0; i < minRows; i++) {
+  // Populate student rows from registered students
+  for (let i = 0; i < students.length; i++) {
     const s = students[i];
     const no = i + 1;
-    const nisn = s?.identitas.nisn ?? "";
     const nama = s?.identitas.nama ?? "";
     const jk = s?.identitas.jenisKelamin ?? "";
-    const row: (string | number)[] = [no, nisn, nama, jk, "", "", "", ""];
-    
-    // Add SUBJECTS values
-    for (const subj of SUBJECTS) {
-      row.push(s ? s.nilai.ujianTertulis[subj] : "", s ? s.nilai.praktek[subj] : "");
+    const row: (string | number)[] = [no, nama, jk];
+
+    // Add empty value cells for each subject (4 cols each: V-1, V-2, VI-1, VI-2)
+    for (const _subj of SUBJECTS) {
+      row.push("", "", "", "");
     }
-    
-    // Add MULOK values
-    for (const m of mulokList) {
-      row.push(s ? s.nilai.ujianMulok[m] : "", s ? s.nilai.praktekMulok[m] : "");
+    for (const _m of mulokList) {
+      row.push("", "", "", "");
     }
-    
     rows.push(row);
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!freeze"] = { xSplit: 8, ySplit: 2 };
-  
-  const subjectColumns = SUBJECTS.length + mulokList.length;
+  ws["!freeze"] = { xSplit: 3, ySplit: 2 };
+
+  const totalSubjects = SUBJECTS.length + mulokList.length;
   ws["!cols"] = [
-    { wch: 4 },
-    { wch: 16 },
-    { wch: 30 },
-    { wch: 6 },
-    ...Array.from({ length: priorSemesterLabels.length }).map(() => ({ wch: 12 })),
-    ...Array.from({ length: subjectColumns * 2 }).map(() => ({ wch: 6 })),
+    { wch: 5 },   // No
+    { wch: 30 },  // Nama Lengkap
+    { wch: 5 },   // JK
+    ...Array.from({ length: totalSubjects * 4 }).map(() => ({ wch: 6 })),
   ];
-  
+
+  // Merge cells: No, Nama, JK span 2 rows; each subject name spans 4 columns
   const merges: XLSX.Range[] = [
-    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
-    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
-    { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
-    { s: { r: 0, c: 4 }, e: { r: 0, c: 7 } },
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, // No
+    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } }, // Nama Lengkap
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }, // JK
+    // Each SUBJECT: merge 4 cols in top header row
     ...SUBJECTS.map((_, idx) => {
-      const start = 8 + idx * 2;
-      return { s: { r: 0, c: start }, e: { r: 0, c: start + 1 } };
+      const start = 3 + idx * 4;
+      return { s: { r: 0, c: start }, e: { r: 0, c: start + 3 } };
     }),
+    // Each MULOK: merge 4 cols in top header row
     ...mulokList.map((_, idx) => {
-      const start = 8 + SUBJECTS.length * 2 + idx * 2;
-      return { s: { r: 0, c: start }, e: { r: 0, c: start + 1 } };
+      const start = 3 + SUBJECTS.length * 4 + idx * 4;
+      return { s: { r: 0, c: start }, e: { r: 0, c: start + 3 } };
     }),
   ];
   ws["!merges"] = merges;
 
-  const headerRows = 2;
-  for (let r = headerRows; r < headerRows + minRows; r++) {
-    ensureCell(ws, r, 1).z = "@";
-  }
-
+  // Styles
   const headerStyle = {
-    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "111827" } },
-    fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } },
+    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    fill: { patternType: "solid", fgColor: { rgb: "1F4E79" } },
     alignment: { vertical: "center", horizontal: "center", wrapText: true },
     border: {
-      top: { style: "thin", color: { rgb: "111827" } },
-      bottom: { style: "thin", color: { rgb: "111827" } },
-      left: { style: "thin", color: { rgb: "111827" } },
-      right: { style: "thin", color: { rgb: "111827" } },
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
     },
     protection: { locked: true },
   };
   const subHeaderStyle = {
-    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "111827" } },
-    fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } },
+    font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "111827" } },
+    fill: { patternType: "solid", fgColor: { rgb: "D6E4F0" } },
     alignment: { vertical: "center", horizontal: "center" },
     border: {
-      top: { style: "thin", color: { rgb: "111827" } },
-      bottom: { style: "thin", color: { rgb: "111827" } },
-      left: { style: "thin", color: { rgb: "111827" } },
-      right: { style: "thin", color: { rgb: "111827" } },
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
     },
     protection: { locked: true },
   };
@@ -1208,47 +1227,50 @@ export function downloadTemplateNilaiUjianKelasExcel(
     font: { name: "Calibri", sz: 11 },
     alignment: { vertical: "center", horizontal: "left" },
     border: {
-      top: { style: "thin", color: { rgb: "111827" } },
-      bottom: { style: "thin", color: { rgb: "111827" } },
-      left: { style: "thin", color: { rgb: "111827" } },
-      right: { style: "thin", color: { rgb: "111827" } },
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
     },
     protection: { locked: true },
   };
   const unlockedStyle = {
     font: { name: "Calibri", sz: 11 },
     alignment: { vertical: "center", horizontal: "center" },
-    fill: { patternType: "solid", fgColor: { rgb: "FEE2E2" } },
+    fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } },
     border: {
-      top: { style: "thin", color: { rgb: "111827" } },
-      bottom: { style: "thin", color: { rgb: "111827" } },
-      left: { style: "thin", color: { rgb: "111827" } },
-      right: { style: "thin", color: { rgb: "111827" } },
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
     },
     protection: { locked: false },
     numFmt: "0",
   };
 
   const lastCol = headerTop.length - 1;
+  // Apply header styles
   for (let c = 0; c <= lastCol; c++) setStyle(ws, 0, c, headerStyle);
   for (let c = 0; c <= lastCol; c++) setStyle(ws, 1, c, subHeaderStyle);
 
-  for (let r = headerRows; r < headerRows + minRows; r++) {
+  // Apply data row styles
+  const headerRows = 2;
+  for (let r = headerRows; r < headerRows + students.length; r++) {
     for (let c = 0; c <= lastCol; c++) {
-      if (c <= 3) {
+      if (c <= 2) {
+        // No, Nama, JK — locked
         const style = { ...lockedStyle } as any;
-        if (c === 0 || c === 1 || c === 3) style.alignment = { vertical: "center", horizontal: "center" };
-        if (c === 2) style.alignment = { vertical: "center", horizontal: "left" };
+        if (c === 0 || c === 2) style.alignment = { vertical: "center", horizontal: "center" };
+        if (c === 1) style.alignment = { vertical: "center", horizontal: "left" };
         setStyle(ws, r, c, style);
       } else {
+        // Value cells — unlocked (editable)
         setStyle(ws, r, c, unlockedStyle);
       }
     }
   }
 
-  // Removed cell comment pop-ups and data validation per user request.
-  // Template will be protected, but nilai dapat diedit di sel yang terbuka.
-
+  // Sheet protection: only unlocked value cells can be edited
   ws["!protect"] = {
     sheet: true,
     content: true,
@@ -1278,6 +1300,7 @@ export function downloadTemplateNilaiUjianKelasExcel(
   XLSX.writeFile(wb, filename, writeOptions);
 }
 
+
 export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianKelasParseResult {
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -1290,25 +1313,37 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
   const arr = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true });
 
   const norm = (v: unknown) => normalizeHeader(v);
+
+  // Detect semester sub-header format: V-1, V-2, VI-1, VI-2
+  const looksLikeSemesterFormat = (v: unknown) => {
+    const k = norm(v);
+    return k === "v1" || k === "v2" || k === "vi1" || k === "vi2";
+  };
+
+  // Detect old V-1/V-2 format
   const looksLikeVFormat = (v: unknown) => {
     const k = norm(v);
-    return k === "v1" || k === "v-1" || k === "v2" || k === "v-2";
+    return k === "v1" || k === "v2";
   };
 
   const maxScanV = Math.min(arr.length - 1, 15);
   let vHeaderRow = -1;
+  let hasFourColFormat = false; // true if VI-1/VI-2 are found (new format)
   for (let i = 0; i < maxScanV; i++) {
     const row = (arr[i] ?? []) as unknown[];
     const next = (arr[i + 1] ?? []) as unknown[];
     const keys = new Set(row.map(norm));
     const hasBase =
       keys.has(norm("No")) &&
-      keys.has(norm("NISN")) &&
-      (keys.has(norm("Nama Lengkap")) || keys.has(norm("Nama Siswa"))) &&
-      keys.has(norm("JK"));
+      (keys.has(norm("Nama Lengkap")) || keys.has(norm("Nama Siswa")));
     const nextHasV = next.some(looksLikeVFormat);
+    const nextHasVI = next.some((v) => {
+      const k = norm(v);
+      return k === "vi1" || k === "vi2";
+    });
     if (hasBase && nextHasV) {
       vHeaderRow = i;
+      hasFourColFormat = nextHasVI;
       break;
     }
   }
@@ -1318,35 +1353,154 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
     const sub = (arr[vHeaderRow + 1] ?? []) as unknown[];
     const findCol = (label: string) => top.findIndex((x) => norm(x) === norm(label));
     const idxNo = findCol("No");
-    const idxNisn = findCol("NISN");
     const idxNama = findCol("Nama Lengkap") !== -1 ? findCol("Nama Lengkap") : findCol("Nama Siswa");
     const idxJk = findCol("JK");
-    if ([idxNo, idxNisn, idxNama, idxJk].some((x) => x === -1)) {
+    // NISN is optional in new format
+    const idxNisn = findCol("NISN");
+
+    if (idxNo === -1 || idxNama === -1) {
       return {
         rows: [],
         warnings,
-        errors: ["Header template Nilai Ujian tidak valid. Pastikan ada kolom: No, NISN, Nama Lengkap, JK."],
+        errors: ["Header template Nilai Ujian tidak valid. Pastikan ada kolom: No, Nama Lengkap."],
       };
     }
 
     const maxCols = Math.max(top.length, sub.length);
+
+    if (hasFourColFormat) {
+      // ===== NEW FORMAT: V-1, V-2, VI-1, VI-2 (kurmer) =====
+      type SemKey = "k5s1" | "k5s2" | "k6s1" | "k6s2";
+      const kurmerColMap: Array<{ col: number; subject: Subject; sem: SemKey }> = [];
+      const mulokKurmerColMap: Array<{ col: number; mulok: AvailableMulok; sem: SemKey }> = [];
+
+      const semKeyMap: Record<string, SemKey> = {
+        v1: "k5s1",
+        v2: "k5s2",
+        vi1: "k6s1",
+        vi2: "k6s2",
+      };
+
+      for (let c = 0; c < maxCols; c++) {
+        const sk = norm(sub[c]);
+        const sem = semKeyMap[sk];
+        if (!sem) continue;
+
+        // Find the subject name: check current top cell, or scan left for the merge-source
+        let subjRaw = str(top[c]).trim();
+        if (!subjRaw) {
+          // Scan left to find the merge source cell
+          for (let sc = c - 1; sc >= 0; sc--) {
+            const val = str(top[sc]).trim();
+            if (val) { subjRaw = val; break; }
+          }
+        }
+        if (!subjRaw) continue;
+
+        // Try Subject first
+        const subj = subjectFromTemplateHeader(subjRaw);
+        if (subj) {
+          kurmerColMap.push({ col: c, subject: subj, sem });
+          continue;
+        }
+
+        // Try Mulok
+        const mulok = mulokFromTemplateHeader(subjRaw);
+        if (mulok) {
+          mulokKurmerColMap.push({ col: c, mulok, sem });
+          continue;
+        }
+      }
+
+      if (kurmerColMap.length === 0 && mulokKurmerColMap.length === 0) {
+        return {
+          rows: [],
+          warnings,
+          errors: ["Kolom mapel tidak ditemukan. Pastikan header mapel dan subheader V-1/V-2/VI-1/VI-2 ada."],
+        };
+      }
+
+      const rows: NilaiUjianKelasRow[] = [];
+      for (let r = vHeaderRow + 2; r < arr.length; r++) {
+        const row = (arr[r] ?? []) as unknown[];
+        const nama = str(worksheetValueAt(ws, r, idxNama) ?? row[idxNama]);
+        const nisn = idxNisn !== -1
+          ? str(worksheetValueAt(ws, r, idxNisn) ?? row[idxNisn]).replace(/^'+/, "").trim()
+          : "";
+        const noRaw = worksheetValueAt(ws, r, idxNo) ?? row[idxNo];
+        const no = typeof noRaw === "number" ? Math.trunc(noRaw) : parseInt(str(noRaw), 10) || 0;
+
+        const isEmpty = !nama && !nisn;
+        if (isEmpty) continue;
+
+        const kurmerValues: NilaiUjianKelasRow["kurmerValues"] = {};
+        const mulokKurmerValues: NilaiUjianKelasRow["mulokKurmerValues"] = {};
+        const rowErrors: string[] = [];
+        if (!nama) rowErrors.push("Nama Siswa kosong.");
+
+        for (const m of kurmerColMap) {
+          const v = clampNilaiOrNull(worksheetValueAt(ws, r, m.col) ?? row[m.col]);
+          if (v !== null) {
+            kurmerValues[m.subject] = kurmerValues[m.subject] ?? {};
+            kurmerValues[m.subject]![m.sem] = v;
+          }
+          const raw = str(worksheetValueAt(ws, r, m.col) ?? row[m.col]).trim();
+          if (raw && v === null) {
+            rowErrors.push(`Nilai ${m.sem} ${m.subject} tidak valid (0–100).`);
+          }
+        }
+
+        for (const m of mulokKurmerColMap) {
+          const v = clampNilaiOrNull(worksheetValueAt(ws, r, m.col) ?? row[m.col]);
+          if (v !== null) {
+            mulokKurmerValues[m.mulok] = mulokKurmerValues[m.mulok] ?? {};
+            mulokKurmerValues[m.mulok]![m.sem] = v;
+          }
+          const raw = str(worksheetValueAt(ws, r, m.col) ?? row[m.col]).trim();
+          if (raw && v === null) {
+            rowErrors.push(`Nilai ${m.sem} ${m.mulok} tidak valid (0–100).`);
+          }
+        }
+
+        rows.push({
+          excelRow: r + 1,
+          no,
+          nama,
+          nisn,
+          kelas: "",
+          values: {},
+          mulokValues: {},
+          kurmerValues,
+          mulokKurmerValues,
+          errors: rowErrors,
+        });
+      }
+      return { rows, warnings, errors };
+    }
+
+    // ===== OLD FORMAT: V-1, V-2 (tertulis/praktek) =====
     const colMap: Array<{ col: number; subject: Subject; kind: "tertulis" | "praktek" }> = [];
     const mulokColMap: Array<{ col: number; mulok: AvailableMulok; kind: "tertulis" | "praktek" }> = [];
-    
+
     for (let c = 0; c < maxCols; c++) {
       const sk = norm(sub[c]);
-      if (sk !== "v1" && sk !== "v-1" && sk !== "v2" && sk !== "v-2") continue;
-      const kind = sk === "v2" || sk === "v-2" ? "praktek" : "tertulis";
-      const direct = str(top[c]).trim();
-      const subjRaw = direct ? direct : str(top[c - 1]).trim();
-      
+      if (sk !== "v1" && sk !== "v2") continue;
+      const kind = sk === "v2" ? "praktek" : "tertulis";
+      let subjRaw = str(top[c]).trim();
+      if (!subjRaw) {
+        for (let sc = c - 1; sc >= 0; sc--) {
+          const val = str(top[sc]).trim();
+          if (val) { subjRaw = val; break; }
+        }
+      }
+
       // Try Subject first
       const subj = subjectFromTemplateHeader(subjRaw);
       if (subj) {
         colMap.push({ col: c, subject: subj, kind });
         continue;
       }
-      
+
       // Try Mulok
       const mulok = mulokFromTemplateHeader(subjRaw);
       if (mulok) {
@@ -1367,9 +1521,9 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
     for (let r = vHeaderRow + 2; r < arr.length; r++) {
       const row = (arr[r] ?? []) as unknown[];
       const nama = str(worksheetValueAt(ws, r, idxNama) ?? row[idxNama]);
-      const nisn = str(worksheetValueAt(ws, r, idxNisn) ?? row[idxNisn])
-        .replace(/^'+/, "")
-        .trim();
+      const nisn = idxNisn !== -1
+        ? str(worksheetValueAt(ws, r, idxNisn) ?? row[idxNisn]).replace(/^'+/, "").trim()
+        : "";
       const noRaw = worksheetValueAt(ws, r, idxNo) ?? row[idxNo];
       const no = typeof noRaw === "number" ? Math.trunc(noRaw) : parseInt(str(noRaw), 10) || 0;
 
@@ -1380,7 +1534,7 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
       const mulokValues: NilaiUjianKelasRow["mulokValues"] = {};
       const rowErrors: string[] = [];
       if (!nama) rowErrors.push("Nama Siswa kosong.");
-      if (!nisn) rowErrors.push("NISN kosong.");
+      if (!nisn && idxNisn !== -1) rowErrors.push("NISN kosong.");
 
       for (const m of colMap) {
         const v = clampNilaiOrNull(worksheetValueAt(ws, r, m.col) ?? row[m.col]);
@@ -1393,7 +1547,7 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
           rowErrors.push(`Nilai ${m.kind === "tertulis" ? "V-1" : "V-2"} ${m.subject} tidak valid (0–100).`);
         }
       }
-      
+
       for (const m of mulokColMap) {
         const v = clampNilaiOrNull(worksheetValueAt(ws, r, m.col) ?? row[m.col]);
         if (v !== null) {
@@ -1406,11 +1560,23 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
         }
       }
 
-      rows.push({ excelRow: r + 1, no, nama, nisn, kelas: "", values, mulokValues, errors: rowErrors });
+      rows.push({
+        excelRow: r + 1,
+        no,
+        nama,
+        nisn,
+        kelas: "",
+        values,
+        mulokValues,
+        kurmerValues: {},
+        mulokKurmerValues: {},
+        errors: rowErrors,
+      });
     }
     return { rows, warnings, errors };
   }
 
+  // ===== FALLBACK: flat header format (old) =====
   const expected = nilaiUjianKelasHeaders();
   const expectedNorm = expected.map(normalizeHeader);
 
@@ -1440,7 +1606,7 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
       rows: [],
       warnings,
       errors: [
-        "Header tidak ditemukan. Pastikan file memakai template 'Nilai Ujian' dengan kolom: No, Nama Siswa, NISN, Kelas, dan kolom nilai per mapel.",
+        "Header tidak ditemukan. Pastikan file memakai template 'Nilai Ujian' dengan kolom: No, Nama Lengkap/Nama Siswa, dan subheader semester (V-1/V-2/VI-1/VI-2).",
       ],
     };
   }
@@ -1493,11 +1659,23 @@ export function parseNilaiUjianKelasFromWorkbook(wb: XLSX.WorkBook): NilaiUjianK
       if (rawP && praktek === null) rowErrors.push(`Nilai Praktek ${subj} tidak valid (0–100).`);
     }
 
-    rows.push({ excelRow: r + 1, no, nama, nisn, kelas, values, errors: rowErrors });
+    rows.push({
+      excelRow: r + 1,
+      no,
+      nama,
+      nisn,
+      kelas,
+      values,
+      mulokValues: {},
+      kurmerValues: {},
+      mulokKurmerValues: {},
+      errors: rowErrors,
+    });
   }
 
   return { rows, warnings, errors };
 }
+
 
 export async function importNilaiUjianKelasFromExcel(
   file: File,

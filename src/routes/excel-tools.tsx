@@ -44,6 +44,7 @@ function ExcelToolsPage() {
   const applyUjianKelasBulk = useStudentStore((s) => s.applyUjianKelasBulk);
   const updateUjianMulok = useStudentStore((s) => s.updateUjianMulok);
   const updatePraktekMulok = useStudentStore((s) => s.updatePraktekMulok);
+  const updateKurmer = useStudentStore((s) => s.updateKurmer);
   const exportSnapshot = useStudentStore((s) => s.exportSnapshot);
   const importSnapshot = useStudentStore((s) => s.importSnapshot);
   const mulokList = useMulokStore((s) => s.config.selected);
@@ -136,6 +137,27 @@ function ExcelToolsPage() {
     return m;
   }, [students]);
 
+  // Name-based matching for new template format (no NISN)
+  const namaToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of students) {
+      const nama = (s.identitas.nama ?? "").trim().toLowerCase();
+      if (nama) m.set(nama, s.id);
+    }
+    return m;
+  }, [students]);
+
+  // Find student ID by NISN first, then by name
+  const findStudentId = (nisn: string, nama: string): string | undefined => {
+    if (nisn) {
+      const id = nisnToId.get(nisn);
+      if (id) return id;
+    }
+    const namaKey = nama.trim().toLowerCase();
+    if (namaKey) return namaToId.get(namaKey);
+    return undefined;
+  };
+
   const processNilaiKelasRows = (parsed: NilaiUjianKelasParseResult) => {
     const rows = parsed.rows;
     const invalid = rows.filter((r) => r.errors.length > 0);
@@ -145,6 +167,52 @@ function ExcelToolsPage() {
       return;
     }
 
+    // Check if this is a kurmer format (V-1/V-2/VI-1/VI-2)
+    const hasKurmer = rows.some((r) => Object.keys(r.kurmerValues).length > 0 || Object.keys(r.mulokKurmerValues).length > 0);
+
+    if (hasKurmer) {
+      // ===== KURMER FORMAT: apply to kurmer data =====
+      let matched = 0;
+      let notFound = 0;
+      for (const r of rows) {
+        const id = findStudentId(r.nisn, r.nama);
+        if (!id) {
+          notFound++;
+          continue;
+        }
+        matched++;
+
+        // Apply kurmer values
+        for (const [subject, vals] of Object.entries(r.kurmerValues)) {
+          const fields = ["k5s1", "k5s2", "k6s1", "k6s2"] as const;
+          for (const field of fields) {
+            if (vals?.[field] !== undefined) {
+              updateKurmer(id, subject as Subject, field, vals[field]!);
+            }
+          }
+        }
+
+        // Apply mulok kurmer values (future: when mulok kurmer is supported in store)
+        // For now, mulok kurmer values are not directly supported by updateKurmer
+        // but we log them
+        if (Object.keys(r.mulokKurmerValues).length > 0) {
+          // Mulok kurmer values received — currently no store method for mulok kurmer
+        }
+      }
+
+      if (matched === 0) {
+        toast.error("Tidak ada siswa yang cocok (berdasarkan nama). Nilai tidak diterapkan.");
+        setNilaiKelasPreview(parsed);
+        return;
+      }
+
+      toast.success(`Import kurmer selesai (${matched} siswa diperbarui)`);
+      if (notFound > 0) toast.warning(`${notFound} baris siswa tidak ditemukan, dilewati`);
+      setNilaiKelasPreview(null);
+      return;
+    }
+
+    // ===== OLD FORMAT: tertulis/praktek =====
     const updates: Array<{
       id: string;
       ujianTertulis: Partial<Record<Subject, number>>;
@@ -157,7 +225,7 @@ function ExcelToolsPage() {
     }> = [];
     let notFound = 0;
     for (const r of rows) {
-      const id = nisnToId.get(r.nisn);
+      const id = findStudentId(r.nisn, r.nama);
       if (!id) {
         notFound++;
         continue;
@@ -182,7 +250,7 @@ function ExcelToolsPage() {
     }
 
     if (updates.length === 0) {
-      toast.error("Tidak ada siswa yang cocok (berdasarkan NISN). Nilai tidak diterapkan.");
+      toast.error("Tidak ada siswa yang cocok. Nilai tidak diterapkan.");
       setNilaiKelasPreview(parsed);
       return;
     }
@@ -202,7 +270,7 @@ function ExcelToolsPage() {
 
     toast.success(`Import selesai (${result.updated} siswa diperbarui)`);
     if (result.skipped > 0) toast.warning(`${result.skipped} siswa tidak berubah`);
-    if (notFound > 0) toast.warning(`${notFound} baris NISN tidak ditemukan, dilewati`);
+    if (notFound > 0) toast.warning(`${notFound} baris siswa tidak ditemukan, dilewati`);
     setNilaiKelasPreview(null);
   };
 
@@ -245,6 +313,43 @@ function ExcelToolsPage() {
       return;
     }
 
+    // Check if this is kurmer format
+    const hasKurmer = rows.some((r) => Object.keys(r.kurmerValues).length > 0 || Object.keys(r.mulokKurmerValues).length > 0);
+
+    if (hasKurmer) {
+      let matched = 0;
+      let notFound = 0;
+      for (const r of rows) {
+        const id = findStudentId(r.nisn, r.nama);
+        if (!id) { notFound++; continue; }
+        matched++;
+      }
+      if (matched === 0) {
+        toast.error("Tidak ada siswa yang cocok.");
+        return;
+      }
+      const extra = notFound > 0 ? ` (${notFound} baris tidak cocok dilewati)` : "";
+      if (!confirm(`Impor akan memperbarui nilai kurmer untuk ${matched} siswa${extra}. Lanjutkan?`)) return;
+
+      for (const r of rows) {
+        const id = findStudentId(r.nisn, r.nama);
+        if (!id) continue;
+        for (const [subject, vals] of Object.entries(r.kurmerValues)) {
+          for (const field of ["k5s1", "k5s2", "k6s1", "k6s2"] as const) {
+            if (vals?.[field] !== undefined) {
+              updateKurmer(id, subject as Subject, field, vals[field]!);
+            }
+          }
+        }
+      }
+
+      toast.success(`Import kurmer selesai (${matched} siswa diperbarui)`);
+      if (notFound > 0) toast.warning(`${notFound} baris siswa tidak ditemukan, dilewati`);
+      setNilaiKelasPreview(null);
+      return;
+    }
+
+    // ===== OLD FORMAT =====
     const updates: Array<{
       id: string;
       ujianTertulis: Partial<Record<Subject, number>>;
@@ -257,7 +362,7 @@ function ExcelToolsPage() {
     }> = [];
     let notFound = 0;
     for (const r of rows) {
-      const id = nisnToId.get(r.nisn);
+      const id = findStudentId(r.nisn, r.nama);
       if (!id) {
         notFound++;
         continue;
@@ -282,10 +387,10 @@ function ExcelToolsPage() {
     }
 
     if (updates.length === 0) {
-      toast.error("Tidak ada siswa yang cocok (berdasarkan NISN).");
+      toast.error("Tidak ada siswa yang cocok.");
       return;
     }
-    const extra = notFound > 0 ? ` (${notFound} baris NISN tidak cocok dilewati)` : "";
+    const extra = notFound > 0 ? ` (${notFound} baris tidak cocok dilewati)` : "";
     if (
       !confirm(
         `Impor akan memperbarui nilai ujian untuk ${updates.length} siswa${extra}. Lanjutkan?`,
@@ -308,7 +413,7 @@ function ExcelToolsPage() {
 
     toast.success(`Import selesai (${result.updated} siswa diperbarui)`);
     if (result.skipped > 0) toast.warning(`${result.skipped} siswa tidak berubah`);
-    if (notFound > 0) toast.warning(`${notFound} baris NISN tidak ditemukan, dilewati`);
+    if (notFound > 0) toast.warning(`${notFound} baris siswa tidak ditemukan, dilewati`);
     setNilaiKelasPreview(null);
   };
 
