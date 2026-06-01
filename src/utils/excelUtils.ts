@@ -1667,6 +1667,237 @@ export async function importNilaiUjianKelasFromExcel(
   return parseNilaiUjianKelasFromWorkbook(wb);
 }
 
+export type NilaiTunggalKelasRow = {
+  no: number;
+  nisn: string;
+  nama: string;
+  jk: string;
+  values: Record<Subject, number | null>;
+  mulokValues: Record<string, number | null>;
+  errors: string[];
+};
+
+export type NilaiTunggalKelasParseResult = {
+  rows: NilaiTunggalKelasRow[];
+  warnings: string[];
+  errors: string[];
+};
+
+export function downloadTemplateNilaiTunggalKelasExcel(
+  students: Student[],
+  sheetName: "Ujian Tertulis" | "Ujian Praktek",
+  mulokList: AvailableMulok[] = ["Bahasa Sunda"],
+  filename?: string,
+) {
+  const wb = XLSX.utils.book_new();
+
+  // Single header row
+  const headerTop: (string | number)[] = ["No", "Nama Lengkap", "JK"];
+  for (const s of SUBJECTS) {
+    headerTop.push(displaySubjectTemplate(s));
+  }
+  for (const m of mulokList) {
+    headerTop.push(displayMulokTemplate(m));
+  }
+
+  const rows: (string | number)[][] = [headerTop];
+
+  // Populate student rows
+  for (let i = 0; i < students.length; i++) {
+    const s = students[i];
+    const no = i + 1;
+    const nama = s?.identitas.nama ?? "";
+    const jk = s?.identitas.jenisKelamin ?? "";
+    const row: (string | number)[] = [no, nama, jk];
+
+    for (const _subj of SUBJECTS) {
+      row.push("");
+    }
+    for (const _m of mulokList) {
+      row.push("");
+    }
+    rows.push(row);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  ws["!cols"] = [{ wch: 5 }, { wch: 30 }, { wch: 6 }];
+  for (let i = 0; i < SUBJECTS.length + mulokList.length; i++) {
+    ws["!cols"].push({ wch: 12 });
+  }
+  ws["!freeze"] = { xSplit: 2, ySplit: 1 };
+
+  // Styles
+  const headerStyle = {
+    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    fill: { patternType: "solid", fgColor: { rgb: "1F4E79" } },
+    alignment: { vertical: "center", horizontal: "center", wrapText: true },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
+    }
+  };
+  const unlockedStyle = {
+    font: { name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "center" },
+    fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
+    },
+    numFmt: "0",
+  };
+  const lockedStyle = {
+    font: { name: "Calibri", sz: 11 },
+    alignment: { vertical: "center", horizontal: "left" },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
+    }
+  };
+
+  const lastCol = headerTop.length - 1;
+  for (let c = 0; c <= lastCol; c++) setStyle(ws, 0, c, headerStyle);
+
+  for (let r = 1; r < rows.length; r++) {
+    for (let c = 0; c <= lastCol; c++) {
+      if (c <= 2) {
+        const style = { ...lockedStyle } as any;
+        if (c === 0 || c === 2) style.alignment = { vertical: "center", horizontal: "center" };
+        setStyle(ws, r, c, style);
+      } else {
+        setStyle(ws, r, c, unlockedStyle);
+      }
+    }
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const finalFilename = filename || `Template-${sheetName.replace(/\s+/g, "-")}-Kelas.xlsx`;
+  const writeOptions: XLSX.WritingOptions & { cellStyles?: boolean } = {
+    bookType: "xlsx",
+    compression: true,
+    cellStyles: true,
+  };
+  XLSX.writeFile(wb, finalFilename, writeOptions);
+}
+
+export function parseNilaiTunggalKelasFromWorkbook(wb: XLSX.WorkBook): NilaiTunggalKelasParseResult {
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  // Try to find matching sheet or fallback to first sheet
+  let sheetName = wb.SheetNames.find(s => s.toLowerCase().includes("tertulis") || s.toLowerCase().includes("praktek"));
+  if (!sheetName) sheetName = wb.SheetNames[0];
+  if (!sheetName) return { rows: [], warnings, errors: ["Workbook kosong atau tidak terbaca."] };
+
+  const ws = wb.Sheets[sheetName];
+  const arr = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true });
+  if (arr.length < 2) return { rows: [], warnings, errors: ["Template kosong (harus ada header + baris data)"] };
+
+  const norm = (v: unknown) => str(v).trim().toLowerCase();
+
+  // Find header row (usually row 0)
+  const maxScanV = Math.min(arr.length - 1, 15);
+  let headerRow = -1;
+  for (let i = 0; i < maxScanV; i++) {
+    const row = (arr[i] ?? []) as unknown[];
+    const keys = new Set(row.map(norm));
+    if (keys.has(norm("No")) && (keys.has(norm("Nama Lengkap")) || keys.has(norm("Nama Siswa")))) {
+      headerRow = i;
+      break;
+    }
+  }
+
+  if (headerRow === -1) {
+    return {
+      rows: [],
+      warnings,
+      errors: ["Header template tidak valid. Pastikan ada kolom: No, Nama Lengkap."],
+    };
+  }
+
+  const top = (arr[headerRow] ?? []) as unknown[];
+  const findCol = (label: string) => top.findIndex((x) => norm(x) === norm(label));
+  const idxNo = findCol("No");
+  const idxNama = findCol("Nama Lengkap") !== -1 ? findCol("Nama Lengkap") : findCol("Nama Siswa");
+  const idxJk = findCol("JK");
+  const idxNisn = findCol("NISN");
+
+  const colMap: Array<{ col: number; subject: Subject }> = [];
+  const mulokColMap: Array<{ col: number; mulok: AvailableMulok }> = [];
+
+  for (let c = 0; c < top.length; c++) {
+    if (c === idxNo || c === idxNama || c === idxJk || c === idxNisn) continue;
+    const subjRaw = str(top[c]).trim();
+    if (!subjRaw) continue;
+
+    const subj = subjectFromTemplateHeader(subjRaw);
+    if (subj) {
+      colMap.push({ col: c, subject: subj });
+      continue;
+    }
+    const mulok = mulokFromTemplateHeader(subjRaw);
+    if (mulok) {
+      mulokColMap.push({ col: c, mulok });
+    }
+  }
+
+  if (colMap.length === 0 && mulokColMap.length === 0) {
+    return { rows: [], warnings, errors: ["Tidak ada kolom mata pelajaran yang valid."] };
+  }
+
+  const parsedRows: NilaiTunggalKelasRow[] = [];
+  for (let r = headerRow + 1; r < arr.length; r++) {
+    const row = arr[r] as unknown[];
+    const noRaw = str(row[idxNo]);
+    const namaRaw = str(row[idxNama]);
+    if (!noRaw && !namaRaw) continue;
+
+    const rowErrors: string[] = [];
+    const values = {} as Record<Subject, number | null>;
+    const mulokValues = {} as Record<string, number | null>;
+
+    for (const mapping of colMap) {
+      const cellVal = row[mapping.col];
+      if (cellVal === "" || cellVal == null) continue;
+      const val = clampNilaiOrNull(cellVal);
+      if (val === null && str(cellVal).trim() !== "") {
+        rowErrors.push(`Nilai ${mapping.subject} tidak valid`);
+      } else if (val !== null) {
+        values[mapping.subject] = val;
+      }
+    }
+
+    for (const mapping of mulokColMap) {
+      const cellVal = row[mapping.col];
+      if (cellVal === "" || cellVal == null) continue;
+      const val = clampNilaiOrNull(cellVal);
+      if (val === null && str(cellVal).trim() !== "") {
+        rowErrors.push(`Nilai ${mapping.mulok} tidak valid`);
+      } else if (val !== null) {
+        mulokValues[mapping.mulok] = val;
+      }
+    }
+
+    parsedRows.push({
+      no: parseInt(noRaw) || 0,
+      nisn: idxNisn !== -1 ? str(row[idxNisn]).trim() : "",
+      nama: namaRaw.trim(),
+      jk: idxJk !== -1 ? str(row[idxJk]).trim() : "",
+      values,
+      mulokValues,
+      errors: rowErrors,
+    });
+  }
+
+  return { rows: parsedRows, warnings, errors };
+}
+
 /**
  * Download template praktek individual (tanpa daftar siswa)
  * Template kosong untuk input nilai praktek satu siswa

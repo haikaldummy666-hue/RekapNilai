@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, Save, Trash2, Download } from "lucide-react";
+import { LoaderCircle, Save, Trash2, Download, FileUp } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
 import { StudentSwitcher } from "@/components/layout/StudentSwitcher";
@@ -19,7 +19,13 @@ import { useActiveStudent } from "@/hooks/useActiveStudent";
 import { useStudentStore } from "@/stores/studentStore";
 import { useAppStateStore } from "@/stores/appStateStore";
 import { formatNilai } from "@/utils/formatUtils";
-import { downloadTemplateUjianTertulisExcel, downloadTemplateUjianTertulisKelasExcel } from "@/utils/excelUtils";
+import { 
+  downloadTemplateUjianTertulisExcel, 
+  downloadTemplateNilaiTunggalKelasExcel,
+  parseNilaiTunggalKelasFromWorkbook,
+  type NilaiTunggalKelasParseResult
+} from "@/utils/excelUtils";
+import * as XLSX from "xlsx";
 import { useMulokStore } from "@/stores/mulokStore";
 import { MulokManager } from "@/components/forms/MulokManager";
 import {
@@ -62,6 +68,8 @@ function UjianTertulisPage() {
   const active = useActiveStudent();
   const students = useStudentStore((s) => s.students);
   const setNilai = useStudentStore((s) => s.setNilai);
+  const updateUjianTertulis = useStudentStore((s) => s.updateUjianTertulis);
+  const updateUjianMulok = useStudentStore((s) => s.updateUjianMulok);
   const getDraft = useAppStateStore((s) => s.state.routes["/ujian-tertulis"]?.drafts);
   const setRouteDraft = useAppStateStore((s) => s.setRouteDraft);
   const removeRouteDraft = useAppStateStore((s) => s.removeRouteDraft);
@@ -74,6 +82,7 @@ function UjianTertulisPage() {
   const [saving, setSaving] = useState(false);
   const [selectedKelas, setSelectedKelas] = useState<string>("all");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!active) {
@@ -93,6 +102,92 @@ function UjianTertulisPage() {
   }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentDraft = draftOwnerRef.current === active?.id ? draft : null;
+
+  // --- EXCEL IMPORT/EXPORT LOGIC ---
+  const nisnToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of students) {
+      const nisn = (s.identitas.nisn ?? "").trim();
+      if (nisn) m.set(nisn, s.id);
+    }
+    return m;
+  }, [students]);
+
+  const namaToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of students) {
+      const nama = (s.identitas.nama ?? "").trim().toLowerCase();
+      if (nama) m.set(nama, s.id);
+    }
+    return m;
+  }, [students]);
+
+  const findStudentId = (nisn: string, nama: string): string | undefined => {
+    if (nisn) {
+      const id = nisnToId.get(nisn);
+      if (id) return id;
+    }
+    const namaKey = nama.trim().toLowerCase();
+    if (namaKey) return namaToId.get(namaKey);
+    return undefined;
+  };
+
+  const processTertulisRows = useCallback((parsed: NilaiTunggalKelasParseResult) => {
+    const rows = parsed.rows;
+    const invalid = rows.filter((r) => r.errors.length > 0);
+    if (invalid.length > 0) {
+      toast.error(`Terdapat ${invalid.length} baris invalid. Perbaiki file dan coba lagi.`);
+      return;
+    }
+    if (rows.length === 0) {
+      toast.error("Tidak ada data ditemukan di dalam file Excel.");
+      return;
+    }
+
+    let matched = 0;
+    let notFound = 0;
+    for (const r of rows) {
+      const id = findStudentId(r.nisn, r.nama);
+      if (!id) {
+        notFound++;
+        continue;
+      }
+      matched++;
+      for (const [subject, val] of Object.entries(r.values)) {
+        if (val !== null) updateUjianTertulis(id, subject as Subject, val);
+      }
+      for (const [mulok, val] of Object.entries(r.mulokValues)) {
+        if (val !== null) updateUjianMulok(id, mulok as any, val);
+      }
+    }
+
+    if (matched === 0) {
+      toast.error("Tidak ada data siswa yang cocok berdasarkan nama.");
+      return;
+    }
+    
+    toast.success(`Import selesai (${matched} siswa diperbarui)`);
+    if (notFound > 0) toast.warning(`${notFound} baris siswa tidak ditemukan, dilewati`);
+    
+    // Clear draft if it exists so we see the fresh updated value
+    if (active) {
+      draftOwnerRef.current = null;
+      setDraft(null);
+      removeRouteDraft("/ujian-tertulis", active.id);
+    }
+  }, [findStudentId, updateUjianTertulis, updateUjianMulok, active, removeRouteDraft]);
+
+  const onImportTertulis = useCallback(async (file: File) => {
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: "array" });
+      const parsed = parseNilaiTunggalKelasFromWorkbook(wb);
+      processTertulisRows(parsed);
+    } catch (e) {
+      toast.error("Gagal membaca file Excel");
+    }
+  }, [processTertulisRows]);
+  // ---------------------------------
 
   const isDirty = useMemo(() => {
     if (!draft || !baselineRef.current) return false;
@@ -196,7 +291,7 @@ function UjianTertulisPage() {
       toast.error("Tidak ada siswa di kelas ini");
       return;
     }
-    downloadTemplateUjianTertulisKelasExcel(siswaByKelas, mulokConfig.selected);
+    downloadTemplateNilaiTunggalKelasExcel(siswaByKelas, "Ujian Tertulis", mulokConfig.selected);
     toast.success("Template Ujian Tertulis (Kelas) diunduh");
     setTemplateDialogOpen(false);
   };
@@ -216,6 +311,27 @@ function UjianTertulisPage() {
                 showAdd={false}
                 showRemove={false}
               />
+              
+              <input
+                type="file"
+                className="hidden"
+                accept=".xlsx"
+                ref={inputRef}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onImportTertulis(file);
+                  if (e.target) e.target.value = "";
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-dashed"
+                onClick={() => inputRef.current?.click()}
+                title="Upload Excel Nilai Ujian Tertulis"
+              >
+                <FileUp className="mr-2 h-4 w-4" /> Upload
+              </Button>
               
               {/* Download Template Dialog */}
               <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
