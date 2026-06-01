@@ -38,53 +38,44 @@ function SKLPage() {
   const user = useAuthStore((s) => s.getCurrentUser());
   const printRef = useRef<HTMLDivElement>(null);
   
-  const activeClass = active?.identitas.kelas?.trim() || "";
-  
+  const rankedAllStudents = useMemo(() => {
+    const sorted = [...students].sort((a, b) => {
+      return jumlahHasilAkhir(b.nilai) - jumlahHasilAkhir(a.nilai);
+    });
+    
+    return sorted.map((s, i) => {
+      let rank = 1;
+      const t = jumlahHasilAkhir(s.nilai);
+      for (let j = 0; j < i; j++) {
+        if (jumlahHasilAkhir(sorted[j].nilai) > t) rank++;
+      }
+      return {
+        id: s.id,
+        nama: s.identitas.nama || "(tanpa nama)",
+        jumlah: t,
+        rata: rataKeseluruhan(s.nilai),
+        rank
+      };
+    });
+  }, [students]);
+
   const computedRank = useMemo(() => {
     if (!active) return "—";
-    
-    // Ambil siswa dengan kelas yang sama
-    const peers = students.filter(s => (s.identitas.kelas?.trim() || "") === activeClass);
-    
-    // Urutkan berdasarkan jumlahHasilAkhir menurun
-    const sortedPeers = [...peers].sort((a, b) => {
-      const totalA = jumlahHasilAkhir(a.nilai);
-      const totalB = jumlahHasilAkhir(b.nilai);
-      return totalB - totalA;
-    });
+    const found = rankedAllStudents.find(r => r.id === active.id);
+    return found ? found.rank : "—";
+  }, [active, rankedAllStudents]);
 
-    const activeTotal = jumlahHasilAkhir(active.nilai);
-    let rank = 1;
-    for (let i = 0; i < sortedPeers.length; i++) {
-      if (sortedPeers[i].id === active.id) break;
-      if (jumlahHasilAkhir(sortedPeers[i].nilai) > activeTotal) {
-        rank++;
-      }
-    }
-    
-    return rank;
-  }, [active, students, activeClass]);
-
-  if (!active) {
-    return (
-      <div className="mx-auto w-full max-w-6xl">
-        <PageHeader title="SKL & Ijazah" />
-        <EmptyStudent />
-      </div>
-    );
-  }
-
-  const rows = buildHasilAkhir(active.nilai);
-  const total = jumlahHasilAkhir(active.nilai);
-  const rata = rataKeseluruhan(active.nilai);
+  const rows = active ? buildHasilAkhir(active.nilai) : [];
+  const total = active ? jumlahHasilAkhir(active.nilai) : 0;
+  const rata = active ? rataKeseluruhan(active.nilai) : 0;
   const pred = predikatOf(rata);
   const logoSrc = resolveMadrasahLogo(user?.profile);
   const namaMadrasah = user?.profile.namaMadrasah || "Madrasah Ibtidaiyah";
   const kepala = user?.profile.namaKepalaMadrasah?.trim() || "—";
-  const kelas = active.identitas.kelas?.trim() || user?.profile.kelas?.trim() || "—";
+  const kelas = active?.identitas.kelas?.trim() || user?.profile.kelas?.trim() || "—";
 
   const onPDF = async () => {
-    if (!printRef.current) return;
+    if (!printRef.current || !active) return;
     toast.info("Menyiapkan PDF SKL…");
     try {
       await exportElementToPDF(printRef.current, `SKL-${active.identitas.nama || "Siswa"}.pdf`);
@@ -101,9 +92,11 @@ function SKLPage() {
         title="SKL & Ijazah"
         description="Surat Keterangan Lulus & rekap nilai akhir untuk ijazah."
         actions={
-          <Button onClick={onPDF} className="bg-gradient-primary text-primary-foreground">
-            <FileText className="mr-2 h-4 w-4" /> Download PDF
-          </Button>
+          active && (
+            <Button onClick={onPDF} className="bg-gradient-primary text-primary-foreground">
+              <FileText className="mr-2 h-4 w-4" /> Download PDF
+            </Button>
+          )
         }
       />
 
@@ -111,24 +104,43 @@ function SKLPage() {
         <StudentSwitcher label="data siswa" showClassFilter />
       </div>
 
-      <div ref={printRef} className="space-y-6 bg-background p-2">
-        <PageCard>
-          <div className="flex items-center gap-4">
-            <img
-              src={logoSrc}
-              alt="Logo"
-              className="h-14 w-14 rounded-xl border border-border object-cover"
-              crossOrigin="anonymous"
-            />
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">
-                Rekap Nilai MI
-              </p>
-              <p className="truncate text-lg font-semibold">{namaMadrasah}</p>
-              <p className="mt-0.5 text-sm text-muted-foreground">Kelas: {kelas}</p>
-            </div>
-          </div>
-        </PageCard>
+      <PageCard title="SKL & Ijazah" className="mb-8">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-16">No</TableHead>
+                <TableHead>Nama Siswa</TableHead>
+                <TableHead className="text-center">Jumlah</TableHead>
+                <TableHead className="text-center">Rata Rata</TableHead>
+                <TableHead className="text-center">Peringkat</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rankedAllStudents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
+                    Belum ada data siswa
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rankedAllStudents.map((r, i) => (
+                  <TableRow key={r.id} className={active?.id === r.id ? "bg-muted/50" : ""}>
+                    <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                    <TableCell className="font-medium">{r.nama}</TableCell>
+                    <TableCell className="text-center tabular-nums">{formatNilai(r.jumlah)}</TableCell>
+                    <TableCell className="text-center tabular-nums">{formatNilai(r.rata)}</TableCell>
+                    <TableCell className="text-center font-bold text-primary">#{r.rank}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </PageCard>
+
+      {active && (
+        <div ref={printRef} className="space-y-6 bg-background p-2">
 
         <PageCard>
           <div className="text-center">
@@ -197,7 +209,8 @@ function SKLPage() {
             Predikat keseluruhan: <span className="font-semibold text-foreground">{pred}</span>
           </p>
         </PageCard>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
