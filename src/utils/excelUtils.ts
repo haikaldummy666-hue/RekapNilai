@@ -1270,26 +1270,8 @@ export function downloadTemplateNilaiUjianKelasExcel(
     }
   }
 
-  // Sheet protection: only unlocked value cells can be edited
-  ws["!protect"] = {
-    sheet: true,
-    content: true,
-    objects: false,
-    scenarios: false,
-    formatCells: false,
-    formatColumns: false,
-    formatRows: false,
-    insertColumns: false,
-    insertRows: false,
-    insertHyperlinks: false,
-    deleteColumns: false,
-    deleteRows: false,
-    selectLockedCells: false,
-    selectUnlockedCells: true,
-    sort: false,
-    autoFilter: false,
-    pivotTables: false,
-  };
+  // Removed cell comment pop-ups and data validation per user request.
+  // Template will no longer be protected, allowing all cells to be edited.
 
   XLSX.utils.book_append_sheet(wb, ws, "Nilai Ujian");
   const writeOptions: XLSX.WritingOptions & { cellStyles?: boolean } = {
