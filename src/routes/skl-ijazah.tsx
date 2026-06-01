@@ -4,8 +4,6 @@ import { FileText, LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard, PageHeader, EmptyStudent } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { StudentSwitcher } from "@/components/layout/StudentSwitcher";
 import {
   Table,
@@ -35,83 +33,37 @@ export const Route = createFileRoute("/skl-ijazah")({
 
 function SKLPage() {
   const active = useActiveStudent();
-  const updatePeringkat = useStudentStore((s) => s.updatePeringkat);
+  const students = useStudentStore((s) => s.students);
+
   const user = useAuthStore((s) => s.getCurrentUser());
   const printRef = useRef<HTMLDivElement>(null);
-  const baselineRef = useRef<number | undefined>(undefined);
-  const [peringkat, setPeringkat] = useState<string>("");
-  const [saving, setSaving] = useState(false);
+  
+  const activeClass = active?.identitas.kelas?.trim() || "";
+  
+  const computedRank = useMemo(() => {
+    if (!active) return "—";
+    
+    // Ambil siswa dengan kelas yang sama
+    const peers = students.filter(s => (s.identitas.kelas?.trim() || "") === activeClass);
+    
+    // Urutkan berdasarkan jumlahHasilAkhir menurun
+    const sortedPeers = [...peers].sort((a, b) => {
+      const totalA = jumlahHasilAkhir(a.nilai);
+      const totalB = jumlahHasilAkhir(b.nilai);
+      return totalB - totalA;
+    });
 
-  useEffect(() => {
-    if (!active) {
-      baselineRef.current = undefined;
-      setPeringkat("");
-      return;
-    }
-    baselineRef.current = active.nilai.peringkatKelas;
-    setPeringkat(active.nilai.peringkatKelas ? String(active.nilai.peringkatKelas) : "");
-  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-
-  const parsedPeringkat = useMemo(() => {
-    const v = peringkat.trim();
-    if (!v) return undefined;
-    const n = Number(v);
-    if (!Number.isFinite(n)) return NaN;
-    return n;
-  }, [peringkat]);
-
-  const isDirty = useMemo(() => {
-    const base = baselineRef.current;
-    if (parsedPeringkat === undefined) return base !== undefined;
-    if (Number.isNaN(parsedPeringkat)) return true;
-    return parsedPeringkat !== base;
-  }, [parsedPeringkat]);
-
-  const doSave = useCallback(async () => {
-    if (!active) return;
-    const v = peringkat.trim();
-    let next: number | undefined;
-    if (v) {
-      const n = Number(v);
-      if (!Number.isInteger(n) || n < 1) {
-        toast.error("Peringkat harus bilangan bulat ≥ 1");
-        return;
+    const activeTotal = jumlahHasilAkhir(active.nilai);
+    let rank = 1;
+    for (let i = 0; i < sortedPeers.length; i++) {
+      if (sortedPeers[i].id === active.id) break;
+      if (jumlahHasilAkhir(sortedPeers[i].nilai) > activeTotal) {
+        rank++;
       }
-      next = n;
-    } else {
-      next = undefined;
     }
-
-    setSaving(true);
-    try {
-      updatePeringkat(active.id, next);
-      baselineRef.current = next;
-      toast.success("Peringkat disimpan");
-    } catch (e) {
-      console.error(e);
-      toast.error("Gagal menyimpan peringkat");
-    } finally {
-      setSaving(false);
-    }
-  }, [active, peringkat, updatePeringkat]);
-
-  const requestSave = useCallback(() => {
-    (document.activeElement as HTMLElement | null)?.blur?.();
-    window.setTimeout(() => {
-      void doSave();
-    }, 0);
-  }, [doSave]);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s") return;
-      e.preventDefault();
-      if (!saving && isDirty) requestSave();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isDirty, requestSave, saving]);
+    
+    return rank;
+  }, [active, students, activeClass]);
 
   if (!active) {
     return (
@@ -155,43 +107,9 @@ function SKLPage() {
         }
       />
 
-      <PageCard
-        className="mb-6"
-        title="Peringkat Kelas"
-        actions={
-          <div className="flex items-end gap-2">
-            <StudentSwitcher label="data siswa" showClassFilter />
-            <Button
-              onClick={requestSave}
-              disabled={!isDirty || saving}
-              className="bg-gradient-primary text-primary-foreground"
-            >
-              {saving ? (
-                <>
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Menyimpan…
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" /> Simpan
-                </>
-              )}
-            </Button>
-          </div>
-        }
-      >
-        <div className="flex max-w-sm flex-col gap-2">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Peringkat (input manual)
-          </Label>
-          <Input
-            type="number"
-            min={1}
-            placeholder="Contoh: 3"
-            value={peringkat}
-            onChange={(e) => setPeringkat(e.target.value)}
-          />
-        </div>
-      </PageCard>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <StudentSwitcher label="data siswa" showClassFilter />
+      </div>
 
       <div ref={printRef} className="space-y-6 bg-background p-2">
         <PageCard>
@@ -271,7 +189,7 @@ function SKLPage() {
             <Stat label="Rata-rata" value={formatNilai(rata)} />
             <Stat
               label="Peringkat"
-              value={active.nilai.peringkatKelas ? `${active.nilai.peringkatKelas}` : "—"}
+              value={`${computedRank}`}
               accent
             />
           </div>
