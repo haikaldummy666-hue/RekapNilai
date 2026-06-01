@@ -15,7 +15,6 @@ export const SUBJECTS = Object.freeze([
   "PJOK",
   "SBP",
   "Bahasa Inggris",
-  "Bahasa Sunda",
 ] as const);
 
 export type Subject = (typeof SUBJECTS)[number];

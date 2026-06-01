@@ -76,8 +76,6 @@ export const useMulokStore = create<MulokState>()(
       
       removeMulok: (mulok) => {
         set((state) => {
-          // Bahasa Sunda tidak boleh dihapus
-          if (mulok === "Bahasa Sunda") return state;
           return {
             config: {
               selected: state.config.selected.filter((m) => m !== mulok),

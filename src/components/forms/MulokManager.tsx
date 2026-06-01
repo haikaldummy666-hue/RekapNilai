@@ -59,18 +59,13 @@ function MulokManagerForm() {
             mulokList.map((m) => (
               <div key={m} className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
                 <span className="text-sm font-medium">{m}</span>
-                {m !== "Bahasa Sunda" && (
-                  <button
-                    onClick={() => handleRemove(m)}
-                    className="ml-1 text-destructive hover:text-destructive/80"
-                    aria-label={`Hapus ${m}`}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                {m === "Bahasa Sunda" && (
-                  <span className="ml-1 text-xs text-muted-foreground">(wajib)</span>
-                )}
+                <button
+                  onClick={() => handleRemove(m)}
+                  className="ml-1 text-destructive hover:text-destructive/80"
+                  aria-label={`Hapus ${m}`}
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             ))
           )}
