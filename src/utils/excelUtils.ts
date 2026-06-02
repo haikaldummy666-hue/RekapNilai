@@ -55,7 +55,7 @@ function triggerDownload(wb: XLSX.WorkBook, filename: string) {
 
 function buildNilaiUjianWorkbook(
   students: Student[],
-  mulokList: AvailableMulok[] = ["Bahasa Sunda"],
+  mulokList: AvailableMulok[] = [],
   locked = false,
 ) {
   const wb = XLSX.utils.book_new();
@@ -216,7 +216,7 @@ function buildNilaiUjianWorkbook(
 export function downloadTemplateNilaiUjianKelasLocked(
   students: Student[],
   filename = "Template-Nilai-Ujian-Kelas-Locked.xlsx",
-  mulokList: AvailableMulok[] = ["Bahasa Sunda"],
+  mulokList: AvailableMulok[] = [],
 ) {
   const wb = buildNilaiUjianWorkbook(students, mulokList, true);
   const writeOptions: XLSX.WritingOptions & { cellStyles?: boolean } = {
@@ -232,7 +232,7 @@ export function downloadTemplateNilaiUjianKelasLocked(
  */
 function buildUjianTertulisKelasTemplateSheet(
   students: Array<{ nama: string; [key: string]: any }>,
-  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  selectedMulok: AvailableMulok[] = [],
 ): XLSX.WorkSheet {
   const allSubjects = [...SUBJECTS, ...selectedMulok];
   const headerTop: (string | number)[] = ["No", "NISN", "Nama", "JK"];
@@ -376,7 +376,7 @@ function buildUjianTertulisKelasTemplateSheet(
  */
 export function downloadTemplateUjianTertulisKelasExcel(
   students: Array<{ nama: string; [key: string]: any }>,
-  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  selectedMulok: AvailableMulok[] = [],
   filename = "Template-Ujian-Tertulis-Kelas.xlsx",
 ) {
   const wb = XLSX.utils.book_new();
@@ -469,7 +469,7 @@ export async function importUjianTertulisKelasFromExcel(
  * Template kosong untuk input nilai ujian tertulis satu siswa
  */
 export function downloadTemplateUjianTertulisExcel(
-  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  selectedMulok: AvailableMulok[] = [],
   filename = "Template-Ujian-Tertulis.xlsx",
 ) {
   const wb = XLSX.utils.book_new();
@@ -1128,7 +1128,7 @@ function clampNilaiOrNull(v: unknown): number | null {
 
 export function downloadTemplateNilaiUjianKelasExcel(
   students: Student[],
-  mulokList: AvailableMulok[] = ["Bahasa Sunda"],
+  mulokList: AvailableMulok[] = [],
   filename = "Template-Nilai-Ujian-Kelas.xlsx",
 ) {
   const wb = XLSX.utils.book_new();
@@ -1688,7 +1688,7 @@ export type NilaiTunggalKelasParseResult = {
 export function downloadTemplateNilaiTunggalKelasExcel(
   students: Student[],
   sheetName: "Ujian Tertulis" | "Ujian Praktek",
-  mulokList: AvailableMulok[] = ["Bahasa Sunda"],
+  mulokList: AvailableMulok[] = [],
   filename?: string,
 ) {
   const wb = XLSX.utils.book_new();
@@ -1907,7 +1907,7 @@ export function parseNilaiTunggalKelasFromWorkbook(wb: XLSX.WorkBook): NilaiTung
  * Template kosong untuk input nilai praktek satu siswa
  */
 export function downloadTemplatePraktekExcel(
-  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  selectedMulok: AvailableMulok[] = [],
   filename = "Template-Praktek.xlsx",
 ) {
   const wb = XLSX.utils.book_new();
@@ -2007,7 +2007,7 @@ export function downloadTemplatePraktekExcel(
  * Template kosong untuk input nilai kurmer satu siswa
  */
 export function downloadTemplateKurmerExcel(
-  selectedMulok: AvailableMulok[] = ["Bahasa Sunda"],
+  selectedMulok: AvailableMulok[] = [],
   filename = "Template-Kurmer.xlsx",
 ) {
   const wb = XLSX.utils.book_new();

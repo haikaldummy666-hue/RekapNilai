@@ -5,7 +5,6 @@
 
 /** Mata pelajaran lokal yang tersedia untuk dipilih */
 export const AVAILABLE_MULOK = [
-  "Bahasa Sunda",
   "Bahasa Daerah",
   "Seni Budaya Lokal",
   "Informatika",
@@ -29,8 +28,8 @@ export interface MulokConfig {
   updatedAt: string;
 }
 
-/** Default: Bahasa Sunda selalu ada */
+/** Default: kosong (mulok opsional) */
 export const DEFAULT_MULOK: MulokConfig = {
-  selected: ["Bahasa Sunda"],
+  selected: [],
   updatedAt: new Date().toISOString(),
 };
